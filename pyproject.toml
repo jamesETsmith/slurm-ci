@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slurm-ci"
+version = "0.1.0"
+description = "Slurm CI"
+authors = [
+    { name = "James E. T. Smith", email = "james.smith9113@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "flask",
+    "requests",
+    "sqlalchemy",
+    "pyyaml",
+    "docker",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/jamesETsmith/amd-ci"
+"Bug Tracker" = "https://github.com/jamesETsmith/amd-ci/issues"
+
+
+[project.scripts]
+slurm-ci = "slurm_ci.cli:main"
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+# A good starting set of rules:
+# E = pycodestyle errors
+# F = pyflakes
+# W = pycodestyle warnings
+# I = isort
+# ANN = flake8-annotations (for type checking)
+select = ["E", "F", "W", "I", "ANN"]
+
+[tool.ruff.lint.isort]
+# Sorts imports automatically
+lines-after-imports = 2

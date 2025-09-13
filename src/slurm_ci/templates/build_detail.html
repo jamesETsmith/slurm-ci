@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h2>Build #{{ build.id }} - {{ build.repo_full_name }}</h2>
+    <p><strong>Commit:</strong> <pre><code>{{ build.commit_sha }}</code></pre></p>
+    <p><strong>Status:</strong> {{ build.status }}</p>
+    <p><strong>Timestamp:</strong> {{ build.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+
+    <h3>Jobs</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Job Name</th>
+                <th>Status</th>
+                <th>Exit Code</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for job in build.jobs %}
+            <tr>
+                <td>{{ job.name }}</td>
+                <td>{{ job.status }}</td>
+                <td>{{ job.exit_code }}</td>
+            </tr>
+            <tr>
+                <td colspan="3">
+                    <details>
+                        <summary>View Logs</summary>
+                        <pre><code>{{ job.logs }}</code></pre>
+                    </details>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="3">No jobs found for this build.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <a href="{{ url_for('index') }}">Back to all builds</a>
+{% endblock %}
