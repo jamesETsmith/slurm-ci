@@ -1,5 +1,6 @@
 import os
 import subprocess
+
 from slurm_ci.workflow_parser import WorkflowParser
 
 
@@ -40,7 +41,8 @@ def launch_slurm_jobs(workflow_file: str, working_directory: str) -> None:
             GFX_ARCH=gfx_arch,
         )
 
-        with open(f"sbatch_{task_name}.sh", "w") as f:
+        slurm_script_path = f"/tmp/sbatch_{task_name}.sh"
+        with open(slurm_script_path, "w") as f:
             f.write(slurm_script)
 
-        subprocess.run(["sbatch", f"sbatch_{task_name}.sh"])
+        subprocess.run(["sbatch", slurm_script_path])
