@@ -1,26 +1,17 @@
 #!/usr/bin/env python3
 import argparse
-import json
 import subprocess
-import sys
 
 from slurm_ci.slurm_launcher import launch_slurm_jobs
 
 
-def local_run(args):
+def local_run(args, unknown_args):
     """Wrapper for the 'act' binary."""
-    # This is a placeholder. You'll need to implement the logic to call 'act'.
-    # For example, constructing the command and using subprocess.run()
-    print("local-run subcommand called. (act wrapper logic goes here)")
-    print(f"Arguments: {args}")
-    if args.act_args is None:
-        args.act_args = []
-    subprocess.run(["act", *args.act_args])
+    subprocess.run(["act", *unknown_args])
 
 
 def slurm_run(args):
     """Runs workflows on a Slurm cluster."""
-    # This is a placeholder. You'll need to implement the Slurm orchestration logic.
     print("slurm-run subcommand called.")
     print(f"Arguments: {args}")
     launch_slurm_jobs(args.workflow_file, args.working_directory)
@@ -36,11 +27,6 @@ def main() -> None:
     parser_local = subparsers.add_parser(
         "local-run", help="Run workflows locally using act."
     )
-    parser_local.add_argument(
-        "act_args",
-        nargs="?",
-        help="Arguments to pass to act.",
-    )
     parser_local.set_defaults(func=local_run)
 
     # Subcommand: slurm-run
@@ -53,8 +39,12 @@ def main() -> None:
     )
     parser_slurm.set_defaults(func=slurm_run)
 
-    args = parser.parse_args()
-    args.func(args)
+    args, unknown_args = parser.parse_known_args()
+
+    if args.command == "local-run":
+        args.func(args, unknown_args)
+    else:
+        args.func(args)
 
 
 if __name__ == "__main__":
