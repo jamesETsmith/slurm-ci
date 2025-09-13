@@ -1,0 +1,16 @@
+name: sample rocm ci
+on: [push]
+jobs:
+  test-rocm-versions:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rocm_version: [ "6.4.2", "6.4.3" ]
+        gpu_arch: [ "gfx90a", "gfx942" ]
+    container:
+      image: rocm/dev-ubuntu-24.04:${{ matrix.rocm_version }}-complete
+    steps:
+      - name: Run tests
+        run: |
+          echo "Testing on ROCm version ${{ matrix.rocm_version }}"
+          echo "$(/opt/rocm/bin/amdclang --version)"
