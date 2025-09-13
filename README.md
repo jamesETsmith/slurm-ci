@@ -9,3 +9,12 @@
 - Create a UI and database for managing the jobs and their results
   - Let's start with just the database and UI for local testing, we'll add the remote monitoring later
 
+CLI Goals:
+
+```bash
+# Run a workflow on the current machine (i.e. nektos/act wrapper):
+slurm-ci local-run --<pass through args to nektos/act>
+
+# Read the workflows and submit all jobs to the slurm as individual jobs:
+slurm-ci slurm-run --workflows <workflows_dir>
+```

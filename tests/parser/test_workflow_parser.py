@@ -1,7 +1,7 @@
 import json
 from slurm_ci.workflow_parser import WorkflowParser
 
-parser = WorkflowParser(open("ci.yml").read())
+parser = WorkflowParser("ci.yml")
 
 
 def test_get_jobs():

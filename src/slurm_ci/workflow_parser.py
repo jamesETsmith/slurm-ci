@@ -4,7 +4,9 @@ import yaml
 
 
 class WorkflowParser:
-    def __init__(self, workflow_content) -> None:
+    def __init__(self, workflow_file) -> None:
+        with open(workflow_file) as f:
+            workflow_content = f.read()
         self.workflow = yaml.safe_load(workflow_content)
 
     def get_jobs(self):
