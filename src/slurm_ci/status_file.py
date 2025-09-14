@@ -20,11 +20,6 @@ class StatusFile:
         working_directory: str,
         matrix_args: dict,
     ):
-        self.hashed_filename = hashlib.sha256(
-            f"{workflow_file}-{matrix_args}".encode()
-        ).hexdigest()
-        self.status_file = os.path.join(STATUS_DIR, f"{self.hashed_filename}.toml")
-
         self.data = OrderedDict(
             {
                 # Project/workflow info
@@ -40,7 +35,7 @@ class StatusFile:
                 },
                 # General info
                 "ci": {
-                    "logfile_path": self.get_logfile_path(),
+                    # "logfile_path": self.get_logfile_path(),
                     "slurm-ci_version": slurm_ci_version,
                 },
                 # Matrix configuration (top-level to control section ordering)
@@ -51,6 +46,11 @@ class StatusFile:
                 },
             }
         )
+
+        self.hashed_filename = hashlib.sha256(f"{self.data}".encode()).hexdigest()
+        self.status_file = os.path.join(STATUS_DIR, f"{self.hashed_filename}.toml")
+        # Add logfile path now that we have the hashed filename
+        self.data["ci"]["logfile_path"] = self.get_logfile_path()
 
     def read(self):
         with open(self.status_file, "r") as f:
