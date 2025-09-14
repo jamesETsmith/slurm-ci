@@ -1,4 +1,5 @@
 from flask import Flask, abort, render_template
+from sqlalchemy.orm import joinedload
 
 from .database import Build, SessionLocal
 
@@ -9,7 +10,13 @@ app = Flask(__name__)
 @app.route("/")
 def index():
     db = SessionLocal()
-    builds = db.query(Build).order_by(Build.created_at.desc()).all()
+    # Use eager loading to fetch jobs along with builds (in case template needs job info)
+    builds = (
+        db.query(Build)
+        .options(joinedload(Build.jobs))
+        .order_by(Build.created_at.desc())
+        .all()
+    )
     db.close()
     return render_template("index.html", builds=builds)
 
@@ -17,7 +24,13 @@ def index():
 @app.route("/build/<int:build_id>")
 def build_detail(build_id):
     db = SessionLocal()
-    build = db.query(Build).filter(Build.id == build_id).first()
+    # Use eager loading to fetch jobs along with the build
+    build = (
+        db.query(Build)
+        .options(joinedload(Build.jobs))
+        .filter(Build.id == build_id)
+        .first()
+    )
     db.close()
     if not build:
         abort(404)

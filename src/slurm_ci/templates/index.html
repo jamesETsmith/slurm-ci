@@ -7,10 +7,13 @@
             <tr>
                 <th>ID</th>
                 <th>Repository</th>
+                <th>Branch</th>
                 <th>Commit SHA</th>
+                <th>Workflow</th>
                 <th>Status</th>
+                <th>Jobs</th>
                 <th>Created At</th>
-                <th>Details</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -18,14 +21,25 @@
             <tr>
                 <td>{{ build.id }}</td>
                 <td>{{ build.repo_full_name }}</td>
-                <td><pre><code>{{ build.commit_sha[:7] }}</code></pre></td>
-                <td>{{ build.status }}</td>
+                <td>{{ build.branch or '-' }}</td>
+                <td><code>{{ build.commit_sha[:7] }}</code></td>
+                <td>{{ build.workflow_file.split('/')[-1] if build.workflow_file else '-' }}</td>
+                <td><span class="status-{{ build.status }}">{{ build.status }}</span></td>
+                <td>
+                    {% set job_counts = build.jobs|groupby('status')|list %}
+                    {% for status, jobs in job_counts %}
+                        <span class="job-count status-{{ status }}">{{ jobs|length }} {{ status }}</span>
+                    {% endfor %}
+                    {% if not build.jobs %}
+                        <span class="job-count">0 jobs</span>
+                    {% endif %}
+                </td>
                 <td>{{ build.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                <td><a href="{{ url_for('build_detail', build_id=build.id) }}">View</a></td>
+                <td><a href="{{ url_for('build_detail', build_id=build.id) }}">View Details</a></td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="6">No builds found.</td>
+                <td colspan="9">No builds found.</td>
             </tr>
             {% endfor %}
         </tbody>
