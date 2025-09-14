@@ -25,6 +25,9 @@ class Build(Base):
     id = Column(Integer, primary_key=True, index=True)
     repo_full_name = Column(String, index=True)
     commit_sha = Column(String)
+    branch = Column(String)
+    workflow_file = Column(String)
+    working_directory = Column(String)
     event_type = Column(String)
     status = Column(String, default="pending")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -39,6 +42,10 @@ class Job(Base):
     status = Column(String, default="pending")
     exit_code = Column(Integer)
     logs = Column(Text)
+    matrix_args = Column(Text)  # JSON string of matrix arguments
+    log_file_path = Column(String)
+    start_time = Column(DateTime)
+    end_time = Column(DateTime)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     build = relationship("Build", back_populates="jobs")
 

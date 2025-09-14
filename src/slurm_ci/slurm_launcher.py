@@ -2,7 +2,6 @@ import os
 import subprocess
 
 from slurm_ci.workflow_parser import WorkflowParser
-from slurm_ci.config import STATUS_DIR
 from slurm_ci.status_file import StatusFile
 
 SLURM_TEMPLATE = """#!/bin/bash
