@@ -4,8 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "slurm-ci"
-version = "0.1.0"
-description = "Slurm CI"
+
+dynamic = ["version"]
+
 authors = [
     { name = "James E. T. Smith", email = "james.smith9113@gmail.com" }
 ]
@@ -21,6 +22,7 @@ dependencies = [
     "sqlalchemy",
     "pyyaml",
     "docker",
+    "toml",
 ]
 
 [project.urls]
