@@ -2,6 +2,9 @@
 
 Slurm CI is a tool for running CI workflows locally or on a Slurm cluster.
 
+## Known Issues
+It will sometimes create multiple jobs on the same node (maybe because the nodes have been broken into virtual mahcines) and docker crashes.
+
 ## Usage
 
 ```bash

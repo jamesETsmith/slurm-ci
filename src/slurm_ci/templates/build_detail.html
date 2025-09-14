@@ -56,7 +56,7 @@
                 </td>
                 <td>
                     {% if job.log_file_path %}
-                        <a href="{{ job.log_file_path }}" target="_blank">View Log</a>
+                        <a href="{{ url_for('job_log', job_id=job.id) }}" target="_blank">View Log</a>
                     {% endif %}
                     {% if job.logs %}
                         <details>
