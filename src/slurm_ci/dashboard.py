@@ -58,7 +58,7 @@ def build_detail(build_id):
 
 @app.route("/job/<int:job_id>/log")
 def job_log(job_id):
-    """Serve the log file for a specific job."""
+    """Serve the raw log file for a specific job with auto-scroll."""
     db = SessionLocal()
     job = db.query(Job).filter(Job.id == job_id).first()
     db.close()
@@ -81,7 +81,37 @@ def job_log(job_id):
             abort(404, description=f"Log file not found: {log_file_path}")
 
     try:
-        return send_file(log_file_path, mimetype="text/plain", as_attachment=False)
+        # Read the log file and wrap it with minimal HTML for auto-scroll
+        with open(log_file_path, "r", encoding="utf-8") as f:
+            log_content = f.read()
+
+        # Create simple HTML wrapper with auto-scroll
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Job Log - {job.name}</title>
+    <style>
+        body {{
+            font-family: monospace;
+            white-space: pre-wrap;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }}
+    </style>
+</head>
+<body>{log_content}
+<script>
+    window.addEventListener('load', function() {{
+        window.scrollTo(0, document.body.scrollHeight);
+    }});
+</script>
+</body>
+</html>"""
+
+        from flask import Response
+
+        return Response(html_content, mimetype="text/html")
     except Exception as e:
         abort(500, description=f"Error reading log file: {str(e)}")
 

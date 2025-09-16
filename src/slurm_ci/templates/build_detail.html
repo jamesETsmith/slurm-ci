@@ -54,9 +54,9 @@
                         <a href="{{ url_for('job_log', job_id=job.id) }}" target="_blank">View Log</a>
                     {% endif %}
                     {% if job.logs %}
-                        <details>
+                        <details class="log-details">
                             <summary>Inline Logs</summary>
-                            <pre><code>{{ job.logs }}</code></pre>
+                            <pre class="log-content"><code>{{ job.logs }}</code></pre>
                         </details>
                     {% endif %}
                 </td>
@@ -69,4 +69,48 @@
         </tbody>
     </table>
     <a href="{{ url_for('index') }}">Back to all builds</a>
+
+    <style>
+        .log-content {
+            max-height: 400px;
+            width: 100%;
+            overflow-y: auto;
+            overflow-x: auto;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 1rem;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+            word-break: break-word;
+            box-sizing: border-box;
+        }
+        .log-details {
+            margin-top: 0.5rem;
+            width: 100%;
+        }
+    </style>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add event listeners to all log details elements
+            const logDetails = document.querySelectorAll('.log-details');
+            
+            logDetails.forEach(function(details) {
+                details.addEventListener('toggle', function() {
+                    if (details.open) {
+                        // Wait a bit for the details to fully open
+                        setTimeout(function() {
+                            const logContent = details.querySelector('.log-content');
+                            if (logContent) {
+                                // Scroll to the bottom of the log content
+                                logContent.scrollTop = logContent.scrollHeight;
+                            }
+                        }, 50);
+                    }
+                });
+            });
+        });
+    </script>
 {% endblock %}
