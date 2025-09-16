@@ -13,6 +13,11 @@ slurm-ci local-run --<pass through args to nektos/act>
 
 # Read the workflows and submit all jobs to the slurm as individual jobs:
 slurm-ci slurm-run <workflow_file> <working_directory>
+
+# Start the dashboard:
+slurm-ci db-init
+slurm-ci db-watch # automatically syncs to the database
+slurm-ci dashboard # starts the dashboard
 ```
 
 ## Installation

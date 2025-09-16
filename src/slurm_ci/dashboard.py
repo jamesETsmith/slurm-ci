@@ -1,3 +1,4 @@
+import json
 import os
 from flask import Flask, abort, render_template, send_file
 from sqlalchemy.orm import joinedload
@@ -6,6 +7,23 @@ from .database import Build, Job, SessionLocal
 
 
 app = Flask(__name__)
+
+
+def format_json_filter(json_string):
+    """Custom Jinja2 filter to format JSON with proper indentation."""
+    if not json_string:
+        return json_string
+    try:
+        # Parse the JSON string and format it with indentation
+        parsed = json.loads(json_string)
+        return json.dumps(parsed, indent=2, separators=(",", ": "))
+    except (json.JSONDecodeError, TypeError):
+        # If parsing fails, return the original string
+        return json_string
+
+
+# Register the custom filter with Jinja2
+app.jinja_env.filters["format_json"] = format_json_filter
 
 
 @app.route("/")

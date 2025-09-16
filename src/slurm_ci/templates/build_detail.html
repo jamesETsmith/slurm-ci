@@ -21,18 +21,23 @@
     <table>
         <thead>
             <tr>
-                <th>Job Name</th>
+                <th>Matrix Args</th>
                 <th>Status</th>
                 <th>Exit Code</th>
                 <th>Duration</th>
-                <th>Matrix Args</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for job in build.jobs %}
             <tr>
-                <td>{{ job.name }}</td>
+                <td>
+                    {% if job.matrix_args %}
+                        <pre><code>{{ job.matrix_args|format_json }}</code></pre>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
                 <td><span class="status-{{ job.status }}">{{ job.status }}</span></td>
                 <td>{{ job.exit_code if job.exit_code is not none else '-' }}</td>
                 <td>
@@ -40,16 +45,6 @@
                         {{ "%.1f"|format((job.end_time - job.start_time).total_seconds()) }}s
                     {% elif job.start_time %}
                         Started {{ job.start_time.strftime('%H:%M:%S') }}
-                    {% else %}
-                        -
-                    {% endif %}
-                </td>
-                <td>
-                    {% if job.matrix_args %}
-                        <details>
-                            <summary>Matrix</summary>
-                            <pre><code>{{ job.matrix_args }}</code></pre>
-                        </details>
                     {% else %}
                         -
                     {% endif %}
@@ -68,7 +63,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="6">No jobs found for this build.</td>
+                <td colspan="5">No jobs found for this build.</td>
             </tr>
             {% endfor %}
         </tbody>
