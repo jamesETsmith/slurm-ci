@@ -17,7 +17,7 @@ def slurm_run(args):
     """Runs workflows on a Slurm cluster."""
     print("slurm-run subcommand called.")
     print(f"Arguments: {args}")
-    launch_slurm_jobs(args.workflow_file, args.working_directory)
+    launch_slurm_jobs(args.workflow_file, args.working_directory, dryrun=args.dryrun)
 
 
 def db_init(args):
@@ -65,6 +65,12 @@ def main() -> None:
     parser_slurm.add_argument("workflow_file", help="Workflow file to run.")
     parser_slurm.add_argument(
         "working_directory", help="The project's working directory."
+    )
+    parser_slurm.add_argument(
+        "--dryrun",
+        action="store_true",
+        help="Perform a dry run without executing jobs."
+        + " (This will still submit the jobs to slurm and pull the dockerfiles.)",
     )
     parser_slurm.set_defaults(func=slurm_run)
 

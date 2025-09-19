@@ -28,7 +28,9 @@ exit $ACT_EXIT_CODE
 """
 
 
-def launch_slurm_jobs(workflow_file: str, working_directory: str) -> None:
+def launch_slurm_jobs(
+    workflow_file: str, working_directory: str, dryrun: bool = False
+) -> None:
     # get dir of workflow file
     workflow_dir = os.path.dirname(workflow_file)
     parser = WorkflowParser(workflow_file)
@@ -39,13 +41,15 @@ def launch_slurm_jobs(workflow_file: str, working_directory: str) -> None:
     matrix_combinations = parser.generate_matrix_combinations()
     for combo in matrix_combinations:
         # gpu_arch is special here because it's also used in the gres line of the slurm script
-        gfx_arch = combo["gpu_arch"]
+        gfx_arch = combo.get("gpu_arch", "gfx942")
 
         act_args = f"--workflows {workflow_dir} " + "".join(
             [f"--matrix {var}:{value} " for var, value in combo.items()]
         )
+        if dryrun:
+            act_args += " --dryrun"
 
-        task_name = "_".join([value for value in combo.values()])
+        task_name = "_".join([str(value) for value in combo.values()])
         print(str(combo))
 
         # Start status file

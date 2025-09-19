@@ -14,3 +14,13 @@ jobs:
         run: |
           echo "Testing on ROCm version ${{ matrix.rocm_version }}"
           echo "$(/opt/rocm/bin/amdclang --version)"
+
+      - name: ROCm 6.4.2 specific step
+        if: matrix.rocm_version == '6.4.2'
+        run: |
+          echo "I'm running on ROCm 6.4.2 with GPU arch ${{ matrix.gpu_arch }}"
+
+      - name: ROCm 6.4.3 specific step
+        if: matrix.rocm_version == '6.4.3'
+        run: |
+          echo "I'm running on ROCm 6.4.3 with GPU arch ${{ matrix.gpu_arch }}"

@@ -1,7 +1,9 @@
+import os
 import json
 from slurm_ci.workflow_parser import WorkflowParser
 
-parser = WorkflowParser("ci.yml")
+cwd = os.path.dirname(os.path.abspath(__file__))
+parser = WorkflowParser(os.path.join(cwd, "ci.yml"))
 
 
 def test_get_jobs():
@@ -24,3 +26,26 @@ def test_generate_matrix_combinations():
     test_generate_matrix_combinations = parser.generate_matrix_combinations()
     print(test_generate_matrix_combinations)
     assert len(test_generate_matrix_combinations) == 4
+
+
+def test_generate_matrix_combinations_with_includes():
+    parser = WorkflowParser(os.path.join(cwd, "ci_with_include.yml"))
+    test_generate_matrix_combinations = parser.generate_matrix_combinations()
+    print(test_generate_matrix_combinations)
+    assert len(test_generate_matrix_combinations) == 10
+
+    correct_combinations = [
+        {"os": "macos-latest", "version": 12},
+        {"os": "macos-latest", "version": 14},
+        {"os": "macos-latest", "version": 16},
+        {"os": "windows-latest", "version": 12},
+        {"os": "windows-latest", "version": 14},
+        {"os": "windows-latest", "version": 16},
+        {"os": "windows-latest", "version": 17},
+        {"os": "ubuntu-latest", "version": 12},
+        {"os": "ubuntu-latest", "version": 14},
+        {"os": "ubuntu-latest", "version": 16},
+    ]
+
+    for combination in test_generate_matrix_combinations:
+        assert combination in correct_combinations
