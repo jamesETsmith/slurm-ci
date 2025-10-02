@@ -10,6 +10,7 @@ from slurm_ci.dashboard import app
 
 def local_run(args, unknown_args):
     """Wrapper for the 'act' binary."""
+    print("Calling act with:\n", "act " + " ".join(unknown_args))
     subprocess.run(["act", *unknown_args])
 
 
