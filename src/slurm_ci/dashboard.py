@@ -1,6 +1,7 @@
 import json
 import os
-from flask import Flask, abort, render_template, send_file
+
+from flask import Flask, Response, abort, render_template, send_file
 from sqlalchemy.orm import joinedload
 
 from .database import Build, Job, SessionLocal
@@ -9,7 +10,7 @@ from .database import Build, Job, SessionLocal
 app = Flask(__name__)
 
 
-def format_json_filter(json_string):
+def format_json_filter(json_string: str) -> str:
     """Custom Jinja2 filter to format JSON with proper indentation."""
     if not json_string:
         return json_string
@@ -27,9 +28,10 @@ app.jinja_env.filters["format_json"] = format_json_filter
 
 
 @app.route("/")
-def index():
+def index() -> str:
     db = SessionLocal()
-    # Use eager loading to fetch jobs along with builds (in case template needs job info)
+    # Use eager loading to fetch jobs along with builds
+    # (in case template needs job info)
     builds = (
         db.query(Build)
         .options(joinedload(Build.jobs))
@@ -41,7 +43,7 @@ def index():
 
 
 @app.route("/build/<int:build_id>")
-def build_detail(build_id):
+def build_detail(build_id: int) -> str:
     db = SessionLocal()
     # Use eager loading to fetch jobs along with the build
     build = (
@@ -57,7 +59,7 @@ def build_detail(build_id):
 
 
 @app.route("/job/<int:job_id>/log")
-def job_log(job_id):
+def job_log(job_id: int) -> Response:
     """Serve the raw log file for a specific job with auto-scroll."""
     db = SessionLocal()
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -109,15 +111,32 @@ def job_log(job_id):
 </body>
 </html>"""
 
-        from flask import Response
-
         return Response(html_content, mimetype="text/html")
     except Exception as e:
         abort(500, description=f"Error reading log file: {str(e)}")
 
 
+@app.route("/job/<int:job_id>/log/download")
+def download_log(job_id: int) -> Response:
+    """Serve the raw log file for a specific job as a download."""
+    db = SessionLocal()
+    job = db.query(Job).filter(Job.id == job_id).first()
+    db.close()
+
+    if not job:
+        abort(404)
+
+    if not job.log_file_path or not os.path.exists(job.log_file_path):
+        abort(404, description="Log file not found")
+
+    try:
+        return send_file(job.log_file_path, as_attachment=True)
+    except Exception as e:
+        abort(500, description=f"Error sending log file: {str(e)}")
+
+
 @app.route("/debug/logs")
-def debug_logs():
+def debug_logs() -> str:
     """Debug route to check log file status."""
     db = SessionLocal()
     jobs = db.query(Job).all()
@@ -139,9 +158,16 @@ def debug_logs():
         log_info.append(info)
 
     html = "<h2>Debug: Log Files Status</h2><table border='1'>"
-    html += "<tr><th>Job ID</th><th>Job Name</th><th>Log Path</th><th>Exists</th><th>Size</th></tr>"
+    html += (
+        "<tr><th>Job ID</th><th>Job Name</th><th>Log Path</th>"
+        "<th>Exists</th><th>Size</th></tr>"
+    )
     for info in log_info:
-        html += f"<tr><td>{info['job_id']}</td><td>{info['job_name']}</td><td>{info['log_file_path']}</td><td>{info['file_exists']}</td><td>{info['file_size']}</td></tr>"
+        html += (
+            f"<tr><td>{info['job_id']}</td><td>{info['job_name']}</td>"
+            f"<td>{info['log_file_path']}</td><td>{info['file_exists']}</td>"
+            f"<td>{info['file_size']}</td></tr>"
+        )
     html += "</table>"
     return html
 

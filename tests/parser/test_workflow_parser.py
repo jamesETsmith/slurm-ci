@@ -1,12 +1,18 @@
 import os
 import json
+import pytest
 from slurm_ci.workflow_parser import WorkflowParser
 
-cwd = os.path.dirname(os.path.abspath(__file__))
-parser = WorkflowParser(os.path.join(cwd, "ci.yml"))
+
+@pytest.fixture
+def get_parser() -> WorkflowParser:
+    file_name = "ci.yml"
+    cwd = os.path.dirname(os.path.abspath(__file__))
+    parser = WorkflowParser(os.path.join(cwd, file_name))
+    return parser
 
 
-def test_get_jobs():
+def test_get_jobs(parser: WorkflowParser):
     jobs = parser.get_jobs()
     assert "test-rocm-versions" in jobs
     job0 = jobs["test-rocm-versions"]
@@ -16,19 +22,20 @@ def test_get_jobs():
     assert job0["strategy"]["matrix"]["gpu_arch"] == ["gfx90a", "gfx942"]
 
 
-def test_get_job_matrix():
+def test_get_job_matrix(parser: WorkflowParser):
     job_matrix = parser.get_job_matrix("test-rocm-versions")
     assert "rocm_version" in job_matrix
     assert "gpu_arch" in job_matrix
 
 
-def test_generate_matrix_combinations():
+def test_generate_matrix_combinations(parser: WorkflowParser):
     test_generate_matrix_combinations = parser.generate_matrix_combinations()
     print(test_generate_matrix_combinations)
     assert len(test_generate_matrix_combinations) == 4
 
 
 def test_generate_matrix_combinations_with_includes():
+    cwd = os.path.dirname(os.path.abspath(__file__))
     parser = WorkflowParser(os.path.join(cwd, "ci_with_include.yml"))
     test_generate_matrix_combinations = parser.generate_matrix_combinations()
     print(test_generate_matrix_combinations)

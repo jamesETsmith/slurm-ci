@@ -46,6 +46,7 @@ def launch_slurm_jobs(
         act_args = f"--workflows {workflow_dir} " + "".join(
             [f"--matrix {var}:{value} " for var, value in combo.items()]
         )
+
         if dryrun:
             act_args += " --dryrun"
 

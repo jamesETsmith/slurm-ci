@@ -52,6 +52,7 @@
                 <td>
                     {% if job.log_file_path %}
                         <a href="{{ url_for('job_log', job_id=job.id) }}" target="_blank">View Log</a>
+                        | <a href="{{ url_for('download_log', job_id=job.id) }}">Download Log</a>
                     {% endif %}
                     {% if job.logs %}
                         <details class="log-details">
