@@ -55,7 +55,30 @@ def build_detail(build_id: int) -> str:
     db.close()
     if not build:
         abort(404)
-    return render_template("build_detail.html", build=build)
+
+    matrix_arg_keys = set()
+    if build.jobs:
+        for job in build.jobs:
+            if job.matrix_args:
+                matrix_args = json.loads(job.matrix_args)
+                matrix_arg_keys.update(matrix_args.keys())
+
+    # sort the keys to have a consistent order
+    sorted_matrix_arg_keys = sorted(list(matrix_arg_keys))
+
+    # attach the parsed matrix args to each job object
+    # to avoid parsing it again in the template
+    for job in build.jobs:
+        if job.matrix_args:
+            job.matrix_args_parsed = json.loads(job.matrix_args)
+        else:
+            job.matrix_args_parsed = {}
+
+    return render_template(
+        "build_detail.html",
+        build=build,
+        matrix_arg_keys=sorted_matrix_arg_keys,
+    )
 
 
 @app.route("/job/<int:job_id>/log")

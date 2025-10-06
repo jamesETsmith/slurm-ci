@@ -18,28 +18,35 @@
     </div>
 
     <h3>Jobs</h3>
-    <table>
+    <table id="jobs-table">
         <thead>
             <tr>
-                <th>Matrix Args</th>
-                <th>Status</th>
-                <th>Exit Code</th>
-                <th>Duration</th>
-                <th>Actions</th>
+                {% for key in matrix_arg_keys %}
+                    <th data-sort-key="{{ key }}">
+                        {{ key|replace('_version', '') }}
+                        <button class="sort-btn">↕</button>
+                    </th>
+                {% endfor %}
+                <th data-sort-key="status">
+                    Status
+                    <button class="sort-btn">↕</button>
+                </th>
+                <th data-sort-key="duration">
+                    Duration
+                    <button class="sort-btn">↕</button>
+                </th>
+                <th>Log</th>
             </tr>
         </thead>
         <tbody>
             {% for job in build.jobs %}
             <tr>
+                {% for key in matrix_arg_keys %}
                 <td>
-                    {% if job.matrix_args %}
-                        <pre><code>{{ job.matrix_args|format_json }}</code></pre>
-                    {% else %}
-                        -
-                    {% endif %}
+                    {{ job.matrix_args_parsed.get(key, '-') }}
                 </td>
+                {% endfor %}
                 <td><span class="status-{{ job.status }}">{{ job.status }}</span></td>
-                <td>{{ job.exit_code if job.exit_code is not none else '-' }}</td>
                 <td>
                     {% if job.start_time and job.end_time %}
                         {{ "%.1f"|format((job.end_time - job.start_time).total_seconds()) }}s
@@ -51,8 +58,8 @@
                 </td>
                 <td>
                     {% if job.log_file_path %}
-                        <a href="{{ url_for('job_log', job_id=job.id) }}" target="_blank">View Log</a>
-                        | <a href="{{ url_for('download_log', job_id=job.id) }}">Download Log</a>
+                        <a href="{{ url_for('job_log', job_id=job.id) }}" class="btn" target="_blank">View</a>
+                        <a href="{{ url_for('download_log', job_id=job.id) }}" class="btn">Download</a>
                     {% endif %}
                     {% if job.logs %}
                         <details class="log-details">
@@ -64,7 +71,8 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="5">No jobs found for this build.</td>
+                {% set colspan = matrix_arg_keys|length + 3 %}
+                <td colspan="{{ colspan }}">No jobs found for this build.</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -91,6 +99,35 @@
             margin-top: 0.5rem;
             width: 100%;
         }
+        .sort-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        .btn {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 400;
+            line-height: 1.5;
+            text-align: center;
+            text-decoration: none;
+            vertical-align: middle;
+            cursor: pointer;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            user-select: none;
+            border: 1px solid transparent;
+            border-radius: 0.25rem;
+            color: #fff;
+            background-color: #6c757d;
+            border-color: #6c757d;
+        }
+        .btn:hover {
+            background-color: #5c6670;
+            border-color: #56606a;
+        }
     </style>
 
     <script>
@@ -110,6 +147,53 @@
                             }
                         }, 50);
                     }
+                });
+            });
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const table = document.getElementById('jobs-table');
+            const headers = table.querySelectorAll('thead th[data-sort-key]');
+            const tbody = table.querySelector('tbody');
+
+            headers.forEach(function(header, index) {
+                const sortBtn = header.querySelector('.sort-btn');
+                if (!sortBtn) return;
+
+                let sortOrder = 'asc';
+
+                sortBtn.addEventListener('click', function() {
+                    const rows = Array.from(tbody.querySelectorAll('tr'));
+
+                    const sortedRows = rows.sort(function(a, b) {
+                        const aValue = a.cells[index].textContent.trim();
+                        const bValue = b.cells[index].textContent.trim();
+
+                        if (aValue === '-' || bValue === '-') {
+                            return aValue === '-' ? 1 : -1;
+                        }
+
+                        // numeric sort for duration
+                        if (header.getAttribute('data-sort-key') === 'duration') {
+                            const aNum = parseFloat(aValue);
+                            const bNum = parseFloat(bValue);
+                            return sortOrder === 'asc' ? aNum - bNum : bNum - aNum;
+                        }
+
+                        return sortOrder === 'asc'
+                            ? aValue.localeCompare(bValue)
+                            : bValue.localeCompare(aValue);
+                    });
+
+                    rows.forEach(function(row) {
+                        tbody.removeChild(row);
+                    });
+
+                    sortedRows.forEach(function(row) {
+                        tbody.appendChild(row);
+                    });
+
+                    sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
                 });
             });
         });
