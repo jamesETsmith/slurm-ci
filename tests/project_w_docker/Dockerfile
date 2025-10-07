@@ -9,3 +9,6 @@ RUN touch /artifacts/test.txt
 
 # meaningless command
 RUN ls -la
+
+COPY test_script.sh /test_script.sh
+RUN chmod +x /test_script.sh

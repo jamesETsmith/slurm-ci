@@ -28,6 +28,9 @@ jobs:
           BASE_IMAGE=ubuntu:${{ matrix.ubuntu_version }}
         file: Dockerfile
         context: .
+
+    - name: run tests in container
+      run: docker run my_image_${{ matrix.ubuntu_version }} /bin/bash -c /test_script.sh
     
     - name: make artifacts dir
       run: mkdir -p artifacts
