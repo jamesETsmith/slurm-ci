@@ -23,17 +23,23 @@
             <tr>
                 {% for key in matrix_arg_keys %}
                     <th data-sort-key="{{ key }}">
-                        {{ key|replace('_version', '') }}
-                        <button class="sort-btn">↕</button>
+                        <div class="sortable-header">
+                            <span>{{ key|replace('_version', '') }}</span>
+                            <button class="sort-btn">↕</button>
+                        </div>
                     </th>
                 {% endfor %}
                 <th data-sort-key="status">
-                    Status
-                    <button class="sort-btn">↕</button>
+                    <div class="sortable-header">
+                        <span>Status</span>
+                        <button class="sort-btn">↕</button>
+                    </div>
                 </th>
                 <th data-sort-key="duration">
-                    Duration
-                    <button class="sort-btn">↕</button>
+                    <div class="sortable-header">
+                        <span>Duration</span>
+                        <button class="sort-btn">↕</button>
+                    </div>
                 </th>
                 <th>Log</th>
             </tr>
@@ -98,35 +104,6 @@
         .log-details {
             margin-top: 0.5rem;
             width: 100%;
-        }
-        .sort-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 1em;
-        }
-        .btn {
-            display: inline-block;
-            padding: 0.25rem 0.5rem;
-            font-size: 0.875rem;
-            font-weight: 400;
-            line-height: 1.5;
-            text-align: center;
-            text-decoration: none;
-            vertical-align: middle;
-            cursor: pointer;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            user-select: none;
-            border: 1px solid transparent;
-            border-radius: 0.25rem;
-            color: #fff;
-            background-color: #6c757d;
-            border-color: #6c757d;
-        }
-        .btn:hover {
-            background-color: #5c6670;
-            border-color: #56606a;
         }
     </style>
 

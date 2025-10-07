@@ -52,6 +52,20 @@ class StatusFile:
         # Add logfile path now that we have the hashed filename
         self.data["ci"]["logfile_path"] = self.get_logfile_path()
 
+    @staticmethod
+    def from_file(status_file: str):
+        """Create a StatusFile object from a file."""
+        with open(status_file, "r") as f:
+            data = toml.load(f)
+        sf = StatusFile(
+            data["project"]["workflow_file"],
+            data["project"]["working_directory"],
+            data["matrix"],
+        )
+        sf.data = data
+        sf.status_file = status_file
+        return sf
+
     def read(self):
         with open(self.status_file, "r") as f:
             return toml.load(f)
