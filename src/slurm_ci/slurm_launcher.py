@@ -43,6 +43,7 @@ def _launch_single_job(status_file: StatusFile, dryrun: bool = False) -> None:
     gfx_arch = combo.get("gpu_arch", "gfx942")
 
     act_args = f"--workflows {workflow_dir} "
+    act_args += " --rm "  # remove the container after the job is done
     for var, value in combo.items():
         act_args += f"--matrix {var}:{value} "
 

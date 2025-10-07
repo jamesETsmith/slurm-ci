@@ -44,6 +44,7 @@ class Job(Base):
     logs = Column(Text)
     matrix_args = Column(Text)  # JSON string of matrix arguments
     log_file_path = Column(String)
+    status_file_path = Column(String)
     start_time = Column(DateTime)
     end_time = Column(DateTime)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

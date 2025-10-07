@@ -91,6 +91,7 @@ class StatusWatcher:
             "exit_code": exit_code,
             "matrix_args": json.dumps(matrix_args) if matrix_args else None,
             "log_file_path": ci.get("logfile_path"),
+            "status_file_path": str(file_path),
             "start_time": datetime.fromtimestamp(start_time) if start_time else None,
             "end_time": datetime.fromtimestamp(end_time) if end_time else None,
             "created_at": datetime.fromtimestamp(start_time)
@@ -155,6 +156,7 @@ class StatusWatcher:
                 existing_job.exit_code = job_info["exit_code"]
                 existing_job.matrix_args = job_info["matrix_args"]
                 existing_job.log_file_path = job_info["log_file_path"]
+                existing_job.status_file_path = job_info["status_file_path"]
                 existing_job.start_time = job_info["start_time"]
                 existing_job.end_time = job_info["end_time"]
                 print(f"Updated job: {job_info['name']} -> {job_info['status']}")
@@ -167,6 +169,7 @@ class StatusWatcher:
                     exit_code=job_info["exit_code"],
                     matrix_args=job_info["matrix_args"],
                     log_file_path=job_info["log_file_path"],
+                    status_file_path=job_info["status_file_path"],
                     start_time=job_info["start_time"],
                     end_time=job_info["end_time"],
                     created_at=job_info["created_at"],
