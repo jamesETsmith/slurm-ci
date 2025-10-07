@@ -133,11 +133,19 @@
         .copy-btn:hover {
             color: #4a7aa4;
         }
+
+        .centered-table {
+            margin: 0 auto;
+            width: 90%;
+        }
     </style>
 </head>
 <body>
     <header>
-        <h1>Slurm CI Dashboard</h1>
+        <h1>
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="height: 1em; vertical-align: middle; margin-right: 0.5em;">
+            Slurm CI Dashboard
+        </h1>
     </header>
     <main>
         {% block content %}{% endblock %}

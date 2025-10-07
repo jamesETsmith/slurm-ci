@@ -15,6 +15,8 @@ jobs:
     
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
+      with:
+        driver: docker # super important to set this
 
     - name: Build and push
       uses: docker/build-push-action@v6
@@ -22,7 +24,35 @@ jobs:
         tags: my_image_${{ matrix.ubuntu_version }}
         load: true
         push: false
-        build-args: BASE_IMAGE=ubuntu:${{ matrix.ubuntu_version }}
+        build-args: |
+          BASE_IMAGE=ubuntu:${{ matrix.ubuntu_version }}
         file: Dockerfile
         context: .
+    
+    - name: make artifacts dir
+      run: mkdir -p artifacts
 
+    - name: get artifacts
+      uses: docker/build-push-action@v6
+      with:
+        file: Dockerfile.artifact_shim
+        context: .
+        build-args: |
+          BASE_IMAGE=my_image_${{ matrix.ubuntu_version }}
+        tags: my_image_${{ matrix.ubuntu_version }}_artifact_shim
+        push: false
+        outputs: |
+          type=local,dest=artifacts
+    
+    - name: alt extraction of artifacts
+      run: |
+        mkdir -p artifacts_alt
+        # need to create a container to copy the artifacts from it
+        id=$(docker create my_image_${{ matrix.ubuntu_version }})
+        docker cp $id:/artifacts/. artifacts_alt
+        docker rm -v $id
+
+    - name: Test artifacts
+      run: |
+        ls -la artifacts
+        ls -la artifacts_alt
