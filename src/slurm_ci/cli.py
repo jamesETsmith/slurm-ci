@@ -3,7 +3,11 @@ import argparse
 import os
 import shutil
 import subprocess
+import platform
+import sys
+from pathlib import Path
 
+from slurm_ci.config import ACT_BINARY, ACT_PATH
 from slurm_ci.dashboard import app
 from slurm_ci.database import init_db
 from slurm_ci.slurm_launcher import launch_slurm_jobs, relaunch_slurm_job
@@ -13,8 +17,36 @@ from slurm_ci.status_watcher import start_status_watcher, sync_status_to_db
 
 def local_run(args: argparse.Namespace, unknown_args: list[str]) -> None:
     """Wrapper for the 'act' binary."""
-    print("Calling act with:\n", "act " + " ".join(unknown_args))
-    subprocess.run(["act", *unknown_args])
+    print("Calling act with:\n", f"{ACT_BINARY} " + " ".join(unknown_args))
+    subprocess.run([ACT_BINARY, *unknown_args])
+
+
+def install_act(args: argparse.Namespace) -> None:
+    """Install the 'act' binary."""
+    print(f"Installing act to {ACT_PATH}")
+    install_dir = Path(ACT_PATH)
+    install_dir.mkdir(exist_ok=True, parents=True)
+
+    arch = platform.machine()
+    if arch == "x86_64":
+        arch = "amd64"
+
+    cmd = [
+        "curl",
+        "--proto",
+        "=https",
+        "--tlsv1.2",
+        "-sSf",
+        "https://raw.githubusercontent.com/nektos/act/master/install.sh",
+    ]
+    ps = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    subprocess.run(
+        ["bash", "-s", "--", "-b", str(install_dir)],
+        input=ps.stdout,
+        text=True,
+        check=True,
+    )
+    print("act installed successfully")
 
 
 def relaunch_run(args: argparse.Namespace) -> None:
@@ -104,6 +136,12 @@ def main() -> None:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    # Subcommand: install-act
+    parser_install_act = subparsers.add_parser(
+        "install-act", help="Install the 'act' binary."
+    )
+    parser_install_act.set_defaults(func=install_act)
+
     # Subcommand: local-run
     parser_local = subparsers.add_parser(
         "local-run", help="Run workflows locally using act."
@@ -192,8 +230,25 @@ def main() -> None:
     )
     parser_db_soft_reset.set_defaults(func=db_soft_reset)
 
+    #
+    # Parse arguments
+    #
     args, unknown_args = parser.parse_known_args()
 
+    #
+    # Check if act binary is installed
+    #
+    if not shutil.which(ACT_BINARY) and args.command != "install-act":
+        print(
+            f"act binary not found at '{ACT_BINARY}'.\n"
+            "Please install it by running 'slurm-ci install-act'\n"
+            "or set the 'SLURM_CI_ACT_BINARY' environment variable."
+        )
+        sys.exit(1)
+
+    #
+    # Run the appropriate function
+    #
     if args.command == "local-run":
         args.func(args, unknown_args)
     else:

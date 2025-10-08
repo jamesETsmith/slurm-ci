@@ -8,3 +8,10 @@ STATUS_DIR = os.environ.get(
     os.path.expanduser("~") + "/.slurm-ci/job_status",
 )
 os.makedirs(STATUS_DIR, exist_ok=True)
+
+ACT_PATH = os.path.expanduser("~") + "/.slurm-ci/bin"
+os.makedirs(ACT_PATH, exist_ok=True)
+ACT_BINARY = os.environ.get(
+    "SLURM_CI_ACT_BINARY",
+    os.path.join(ACT_PATH, "act"),
+)
