@@ -23,11 +23,12 @@ dependencies = [
     "pyyaml",
     "docker",
     "toml",
+    "psutil",
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/jamesETsmith/amd-ci"
-"Bug Tracker" = "https://github.com/jamesETsmith/amd-ci/issues"
+"Homepage" = "https://github.com/jamesETsmith/slurm-ci"
+"Bug Tracker" = "https://github.com/jamesETsmith/slurm-ci/issues"
 
 
 [project.scripts]

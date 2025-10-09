@@ -1,6 +1,7 @@
 import datetime
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     ForeignKey,
@@ -49,6 +50,37 @@ class Job(Base):
     end_time = Column(DateTime)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     build = relationship("Build", back_populates="jobs")
+
+
+class GitRepo(Base):
+    __tablename__ = "git_repos"
+    id = Column(Integer, primary_key=True, index=True)
+    daemon_name = Column(String, unique=True, index=True)
+    repo_url = Column(String, index=True)
+    branch = Column(String, default="main")
+    workflow_file = Column(String)
+    config_dir = Column(String)
+    polling_interval = Column(Integer, default=300)
+    is_active = Column(Boolean, default=True)
+    last_checked_at = Column(DateTime)
+    last_commit_sha = Column(String)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
+    commit_trackers = relationship("CommitTracker", back_populates="repo")
+
+
+class CommitTracker(Base):
+    __tablename__ = "commit_trackers"
+    id = Column(Integer, primary_key=True, index=True)
+    repo_id = Column(Integer, ForeignKey("git_repos.id"))
+    commit_sha = Column(String, index=True)
+    processed_at = Column(DateTime, default=datetime.datetime.utcnow)
+    build_triggered = Column(Boolean, default=False)
+    build_id = Column(Integer, ForeignKey("builds.id"), nullable=True)
+    repo = relationship("GitRepo", back_populates="commit_trackers")
+    build = relationship("Build")
 
 
 def init_db() -> None:

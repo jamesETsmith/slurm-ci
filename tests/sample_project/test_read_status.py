@@ -1,7 +1,7 @@
 import tomllib
 import os
 
-from slurm_ci.slurm_launcher import STATUS_DIR
+from slurm_ci.config import STATUS_DIR
 
 for file in os.listdir(STATUS_DIR):
     if file.endswith(".toml"):

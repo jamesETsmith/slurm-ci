@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 import argparse
 import os
+import platform
 import shutil
 import subprocess
-import platform
 import sys
 from pathlib import Path
 
 from slurm_ci.config import ACT_BINARY, ACT_PATH
+from slurm_ci.daemon_manager import DaemonManager
 from slurm_ci.dashboard import app
 from slurm_ci.database import init_db
+from slurm_ci.git_watch_config import create_example_config
+from slurm_ci.git_watcher import start_git_watcher
 from slurm_ci.slurm_launcher import launch_slurm_jobs, relaunch_slurm_job
 from slurm_ci.status_file import StatusFile
 from slurm_ci.status_watcher import start_status_watcher, sync_status_to_db
@@ -130,6 +133,70 @@ def db_soft_reset(args: argparse.Namespace) -> None:
     print("Soft reset complete.")
 
 
+def git_watch_start(args: argparse.Namespace) -> None:
+    """Start a git-watch daemon."""
+    print(f"Starting git-watch daemon from config: {args.config_file}")
+    start_git_watcher(args.config_file)
+
+
+def git_watch_stop(args: argparse.Namespace) -> None:
+    """Stop a git-watch daemon."""
+    daemon_manager = DaemonManager()
+
+    if args.daemon_name:
+        # Stop specific daemon
+        if daemon_manager.stop_daemon(args.daemon_name):
+            print(f"Successfully stopped daemon: {args.daemon_name}")
+        else:
+            print(f"Failed to stop daemon: {args.daemon_name}")
+            sys.exit(1)
+    else:
+        print("Error: daemon name is required")
+        sys.exit(1)
+
+
+def git_watch_stop_all(args: argparse.Namespace) -> None:
+    """Stop all git-watch daemons."""
+    daemon_manager = DaemonManager()
+    stopped_count = daemon_manager.stop_all_daemons()
+    print(f"Stopped {stopped_count} daemon(s)")
+
+
+def git_watch_status(args: argparse.Namespace) -> None:
+    """Show status of git-watch daemons."""
+    daemon_manager = DaemonManager()
+    running_daemons = daemon_manager.list_running_daemons()
+
+    if not running_daemons:
+        print("No git-watch daemons are currently running")
+        return
+
+    print(f"Found {len(running_daemons)} running git-watch daemon(s):")
+    print()
+
+    for daemon in running_daemons:
+        print(f"Daemon: {daemon['daemon_name']}")
+        print(f"  PID: {daemon.get('pid', 'unknown')}")
+        print(f"  Status: {daemon.get('status', 'unknown')}")
+        print(f"  Started: {daemon.get('started_at', 'unknown')}")
+        print(f"  Last Check: {daemon.get('last_check', 'never')}")
+        print(f"  Last Commit: {daemon.get('last_commit', 'none')}")
+
+        config = daemon.get("config", {})
+        if config:
+            print(f"  Repository: {config.get('repo_url', 'unknown')}")
+            print(f"  Branch: {config.get('branch', 'unknown')}")
+            interval = config.get("polling_interval", "unknown")
+            print(f"  Polling Interval: {interval}s")
+        print()
+
+
+def git_watch_create_config(args: argparse.Namespace) -> None:
+    """Create an example git-watch configuration file."""
+    output_path = args.output or "git-watch-config.toml"
+    create_example_config(output_path)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="slurm-ci - A tool for running CI workflows locally or on Slurm."
@@ -229,6 +296,53 @@ def main() -> None:
         help="Regenerate the database from the status file directory (a soft reset).",
     )
     parser_db_soft_reset.set_defaults(func=db_soft_reset)
+
+    # Subcommand: git-watch
+    parser_git_watch = subparsers.add_parser(
+        "git-watch", help="Git repository watching commands."
+    )
+    git_watch_subparsers = parser_git_watch.add_subparsers(
+        dest="git_watch_command", required=True
+    )
+
+    # git-watch start
+    parser_git_watch_start = git_watch_subparsers.add_parser(
+        "start", help="Start a git-watch daemon."
+    )
+    parser_git_watch_start.add_argument(
+        "config_file", help="Path to git-watch configuration file."
+    )
+    parser_git_watch_start.set_defaults(func=git_watch_start)
+
+    # git-watch stop
+    parser_git_watch_stop = git_watch_subparsers.add_parser(
+        "stop", help="Stop a git-watch daemon."
+    )
+    parser_git_watch_stop.add_argument(
+        "daemon_name", help="Name of the daemon to stop."
+    )
+    parser_git_watch_stop.set_defaults(func=git_watch_stop)
+
+    # git-watch stop-all
+    parser_git_watch_stop_all = git_watch_subparsers.add_parser(
+        "stop-all", help="Stop all git-watch daemons."
+    )
+    parser_git_watch_stop_all.set_defaults(func=git_watch_stop_all)
+
+    # git-watch status
+    parser_git_watch_status = git_watch_subparsers.add_parser(
+        "status", help="Show status of git-watch daemons."
+    )
+    parser_git_watch_status.set_defaults(func=git_watch_status)
+
+    # git-watch create-config
+    parser_git_watch_create_config = git_watch_subparsers.add_parser(
+        "create-config", help="Create an example git-watch configuration file."
+    )
+    parser_git_watch_create_config.add_argument(
+        "--output", "-o", help="Output file path (default: git-watch-config.toml)."
+    )
+    parser_git_watch_create_config.set_defaults(func=git_watch_create_config)
 
     #
     # Parse arguments

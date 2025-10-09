@@ -1,17 +1,30 @@
 import os
+from pathlib import Path
 
-os.makedirs(os.path.expanduser("~") + "/.slurm-ci", exist_ok=True)
-DATABASE_URL = f"sqlite:///{os.path.expanduser('~')}/.slurm-ci/slurm_ci.db"
+# Base slurm-ci directory
+SLURM_CI_DIR = Path.home() / ".slurm-ci"
+SLURM_CI_DIR.mkdir(exist_ok=True)
+
+DATABASE_URL = f"sqlite:///{SLURM_CI_DIR}/slurm_ci.db"
 
 STATUS_DIR = os.environ.get(
     "SLURM_CI_STATUS_DIR",
-    os.path.expanduser("~") + "/.slurm-ci/job_status",
+    str(SLURM_CI_DIR / "job_status"),
 )
-os.makedirs(STATUS_DIR, exist_ok=True)
+Path(STATUS_DIR).mkdir(exist_ok=True)
 
-ACT_PATH = os.path.expanduser("~") + "/.slurm-ci/bin"
-os.makedirs(ACT_PATH, exist_ok=True)
+ACT_PATH = str(SLURM_CI_DIR / "bin")
+Path(ACT_PATH).mkdir(exist_ok=True)
 ACT_BINARY = os.environ.get(
     "SLURM_CI_ACT_BINARY",
-    os.path.join(ACT_PATH, "act"),
+    str(Path(ACT_PATH) / "act"),
 )
+
+# Git-watch directories
+GIT_WATCH_DIR = str(SLURM_CI_DIR / "git-watch")
+git_watch_path = Path(GIT_WATCH_DIR)
+git_watch_path.mkdir(exist_ok=True)
+(git_watch_path / "pids").mkdir(exist_ok=True)
+(git_watch_path / "status").mkdir(exist_ok=True)
+(git_watch_path / "logs").mkdir(exist_ok=True)
+(git_watch_path / "repos").mkdir(exist_ok=True)

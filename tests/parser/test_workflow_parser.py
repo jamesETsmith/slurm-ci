@@ -5,7 +5,7 @@ from slurm_ci.workflow_parser import WorkflowParser
 
 
 @pytest.fixture
-def get_parser() -> WorkflowParser:
+def parser() -> WorkflowParser:
     file_name = "ci.yml"
     cwd = os.path.dirname(os.path.abspath(__file__))
     parser = WorkflowParser(os.path.join(cwd, file_name))

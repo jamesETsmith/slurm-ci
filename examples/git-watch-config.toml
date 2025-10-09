@@ -1,0 +1,30 @@
+# Example git-watch configuration file
+# Copy this file and modify it for your repository
+
+[daemon]
+# Unique name for this git-watch daemon instance
+name = "my-project-main"
+
+# How often to check for new commits (in seconds)
+# Minimum: 60 seconds to avoid rate limiting
+polling_interval = 300
+
+[repository]
+# GitHub repository URL (HTTPS or SSH)
+url = "https://github.com/user/repo"
+
+# Branch to monitor (defaults to "main")
+branch = "main"
+
+# GitHub personal access token (optional, for private repos or higher rate limits)
+# You can also set this as an environment variable: GITHUB_TOKEN
+# github_token = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+[slurm-ci]
+# Directory containing slurm-ci configuration files
+# This should contain any matrix configurations, environment settings, etc.
+config_dir = "/path/to/slurm-ci-configs"
+
+# Path to the workflow file relative to the repository root
+# This is the GitHub Actions workflow file that slurm-ci will execute
+workflow_file = ".github/workflows/ci.yml"
