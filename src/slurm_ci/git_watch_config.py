@@ -11,17 +11,15 @@ from typing import Optional
 class GitWatchConfig:
     """Configuration for a git-watch daemon instance."""
 
-    # Daemon settings
+    # Required fields (no defaults)
     daemon_name: str
-    polling_interval: int = 300
-
-    # Repository settings
     repo_url: str
+    config_dir: str
+
+    # Optional fields (with defaults)
+    polling_interval: int = 300
     branch: str = "main"
     github_token: Optional[str] = None
-
-    # Slurm settings
-    config_dir: str
     workflow_file: str = "workflows/ci.yml"
 
     @classmethod

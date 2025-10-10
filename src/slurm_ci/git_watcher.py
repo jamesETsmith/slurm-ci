@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from .daemon_manager import DaemonManager
-from .database import CommitTracker, GitRepo, SessionLocal
+from .database import CommitTracker, GitRepo, SessionLocal, init_db
 from .git_watch_config import GitWatchConfig
 from .slurm_launcher import launch_slurm_jobs
 
@@ -113,8 +113,22 @@ class GitWatcher:
             session.commit()
         except Exception as e:
             session.rollback()
-            self.logger.error(f"Error setting up database: {e}")
-            raise
+            # Check if this is a "no such table" error
+            if "no such table" in str(e):
+                self.logger.info("Database tables not found, initializing database...")
+                session.close()  # Close current session before init
+                try:
+                    init_db()
+                    self.logger.info("Database initialized successfully")
+                    # Retry the setup after initialization
+                    self._setup_database()
+                    return
+                except Exception as init_error:
+                    self.logger.error(f"Failed to initialize database: {init_error}")
+                    raise init_error
+            else:
+                self.logger.error(f"Error setting up database: {e}")
+                raise
         finally:
             session.close()
 
@@ -298,15 +312,10 @@ class GitWatcher:
             self.logger.error(f"Error triggering CI job: {e}")
             return False
         finally:
-            # Clean up temporary directory
-            if temp_dir and Path(temp_dir).exists():
-                try:
-                    subprocess.run(["rm", "-rf", temp_dir], check=True)
-                    self.logger.debug(f"Cleaned up temporary directory: {temp_dir}")
-                except subprocess.CalledProcessError as e:
-                    self.logger.warning(
-                        f"Failed to clean up temp directory {temp_dir}: {e}"
-                    )
+            # Note: We don't clean up the temporary directory here because
+            # Slurm jobs run asynchronously and need access to the directory.
+            # The cleanup will be handled by the Slurm job script itself.
+            pass
 
     def _poll_once(self) -> None:
         """Perform one polling cycle."""

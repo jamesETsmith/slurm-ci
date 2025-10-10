@@ -25,7 +25,6 @@ echo "[runtime.end]" >> {STATUSFILE_PATH}
 echo "time = $(date +%s)" >> {STATUSFILE_PATH}
 echo "exit_code = $ACT_EXIT_CODE" >> {STATUSFILE_PATH}
 
-
 # Exit with the same code as act (so we have another way to track the job)
 exit $ACT_EXIT_CODE
 """
@@ -42,6 +41,7 @@ def _launch_single_job(status_file: StatusFile, dryrun: bool = False) -> None:
     # gpu_arch is special here because it's also used in the gres line of the slurm script
     gfx_arch = combo.get("gpu_arch", "gfx942")
 
+    # Use the workflows directory - act will find all workflow files in it
     act_args = f"--workflows {workflow_dir} "
     act_args += " --rm "  # remove the container after the job is done
     for var, value in combo.items():
