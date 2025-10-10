@@ -333,6 +333,8 @@ def launch_slurm_jobs(
     template_path: Optional[Path] = None,
     custom_sbatch_options: Optional[Dict[str, Any]] = None,
     git_repo: Optional[Dict[str, str]] = None,
+    git_repo_url: Optional[str] = None,
+    git_repo_branch: Optional[str] = None,
 ) -> None:
     """Launch SLURM jobs for a workflow.
 
@@ -345,6 +347,8 @@ def launch_slurm_jobs(
         template_path: Path to a specific template file
         custom_sbatch_options: Additional SBATCH options to override defaults
         git_repo: Git repository info (url, branch, commit_sha) for cloning on compute node
+        git_repo_url: Git repository URL for status file (git-watch only)
+        git_repo_branch: Git repository branch for status file (git-watch only)
     """
     # get dir of workflow file
     parser = WorkflowParser(workflow_file)
@@ -359,6 +363,8 @@ def launch_slurm_jobs(
             workflow_file=workflow_file,
             working_directory=working_directory,
             matrix_args=combo,
+            git_repo_url=git_repo_url,
+            git_repo_branch=git_repo_branch,
         )
         status_file.write()
         _launch_single_job(

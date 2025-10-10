@@ -11,7 +11,7 @@ polling_interval = 300
 
 [repository]
 # GitHub repository URL (HTTPS or SSH)
-url = "https://github.com/jamesETsmith/slurm-ci"
+url = "git@github.com:jamesETsmith/slurm-ci.git"
 
 # Branch to monitor (defaults to "main")
 branch = "main"

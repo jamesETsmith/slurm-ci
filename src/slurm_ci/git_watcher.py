@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+import subprocess
 
 import requests
 
@@ -132,44 +133,15 @@ class GitWatcher:
         finally:
             session.close()
 
-    def _get_github_api_url(self) -> str:
-        """Get GitHub API URL for the repository."""
-        repo_name = self.config.get_repo_name()
-        return f"https://api.github.com/repos/{repo_name}/branches/{self.config.branch}"
-
     def _fetch_latest_commit(self) -> Optional[str]:
         """Fetch the latest commit SHA from GitHub API."""
         try:
-            url = self._get_github_api_url()
-            self.logger.debug(f"Fetching latest commit from: {url}")
-
-            response = self.session.get(url, timeout=30)
-
-            if response.status_code == 404:
-                self.logger.error(
-                    f"Repository or branch not found: "
-                    f"{self.config.repo_url}#{self.config.branch}"
-                )
-                return None
-            elif response.status_code == 403:
-                self.logger.error("GitHub API rate limit exceeded or access denied")
-                return None
-            elif response.status_code != 200:
-                self.logger.error(
-                    f"GitHub API error: {response.status_code} - {response.text}"
-                )
-                return None
-
-            data = response.json()
-            commit_sha = data["commit"]["sha"]
-            self.logger.debug(f"Latest commit SHA: {commit_sha}")
-            return commit_sha
-
-        except requests.exceptions.RequestException as e:
+            commit_hash = subprocess.check_output(
+                ["git", "ls-remote", self.config.repo_url, self.config.branch]
+            )
+            return commit_hash.decode("utf-8").split("\t")[0]
+        except Exception as e:
             self.logger.error(f"Error fetching latest commit: {e}")
-            return None
-        except (KeyError, ValueError) as e:
-            self.logger.error(f"Error parsing GitHub API response: {e}")
             return None
 
     def _is_commit_processed(self, commit_sha: str) -> bool:
@@ -269,6 +241,8 @@ class GitWatcher:
                 placeholder_workdir,
                 dryrun=False,
                 git_repo=git_repo,
+                git_repo_url=self.config.repo_url,
+                git_repo_branch=self.config.branch,
             )
 
             self.logger.info(f"Successfully triggered CI job for commit: {commit_sha}")
