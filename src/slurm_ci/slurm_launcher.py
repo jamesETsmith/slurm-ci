@@ -28,9 +28,20 @@ export {{ key }}="{{ value }}"
 {%- endfor %}
 
 {%- endif %}
+{%- if git_repo %}
+# Clone repository on compute node
+echo "Cloning repository: {{ git_repo.url }}"
+TEMP_REPO_DIR=$(mktemp -d -t slurm-ci-repo-XXXXXX)
+git clone --depth 1 --branch {{ git_repo.branch }} {{ git_repo.url }} "$TEMP_REPO_DIR"
+cd "$TEMP_REPO_DIR"
+git checkout {{ git_repo.commit_sha }}
+echo "Repository cloned to: $TEMP_REPO_DIR"
+
+{%- else %}
 # Change to the working directory
 cd {{ workdir }}
 
+{%- endif %}
 # Run the main command
 {{ main_command }}
 EXIT_CODE=$?
@@ -44,11 +55,19 @@ echo "exit_code = $EXIT_CODE" >> {{ status_file }}
 
 {%- endif %}
 {%- if cleanup_temp_dir %}
+{%- if git_repo %}
+# Clean up temporary repository directory
+if [[ -n "$TEMP_REPO_DIR" && "$TEMP_REPO_DIR" == /tmp/slurm-ci-repo-* ]]; then
+    echo "Cleaning up temporary repository directory: $TEMP_REPO_DIR"
+    rm -rf "$TEMP_REPO_DIR"
+fi
+{%- else %}
 # Clean up temporary directory if it looks like a slurm-ci temp dir
 if [[ "{{ workdir }}" == /tmp/slurm-ci-* ]]; then
     echo "Cleaning up temporary directory: {{ workdir }}"
     rm -rf "{{ workdir }}"
 fi
+{%- endif %}
 
 {%- endif %}
 {%- if post_commands %}
@@ -66,14 +85,18 @@ exit $EXIT_CODE
 class SlurmTemplateRenderer:
     """Handles SLURM job script generation using Jinja2 templates."""
 
-    def __init__(self, template_dir: Optional[Path] = None):
+    def __init__(
+        self, template_dir: Optional[Path] = None, template_path: Optional[Path] = None
+    ) -> None:
         """Initialize the template renderer.
 
         Args:
             template_dir: Optional directory containing custom templates.
                          If None, uses built-in templates.
+            template_path: Optional path to a specific template file.
         """
         self.template_dir = template_dir
+        self.template_path = template_path
         self.env = None
 
         if template_dir and template_dir.exists():
@@ -89,6 +112,17 @@ class SlurmTemplateRenderer:
         Returns:
             Jinja2 Template object
         """
+        # If a specific template file path is provided, use it
+        if self.template_path and self.template_path.exists():
+            try:
+                with open(self.template_path, "r") as f:
+                    template_content = f.read()
+                return Template(template_content)
+            except Exception:
+                # Fall back to default if custom template fails
+                pass
+
+        # If template directory is provided, try to load from it
         if self.env:
             try:
                 return self.env.get_template(f"{template_name}.j2")
@@ -110,6 +144,7 @@ class SlurmTemplateRenderer:
         post_commands: Optional[list] = None,
         status_file: Optional[str] = None,
         cleanup_temp_dir: bool = True,
+        git_repo: Optional[Dict[str, str]] = None,
         **kwargs,
     ) -> str:
         """Render a SLURM job script from template.
@@ -124,6 +159,7 @@ class SlurmTemplateRenderer:
             post_commands: Commands to run after main command
             status_file: Path to status file for job tracking
             cleanup_temp_dir: Whether to clean up temp directories
+            git_repo: Git repository info (url, branch, commit_sha) for cloning on compute node
             **kwargs: Additional template variables
 
         Returns:
@@ -140,6 +176,7 @@ class SlurmTemplateRenderer:
             "post_commands": post_commands or [],
             "status_file": status_file,
             "cleanup_temp_dir": cleanup_temp_dir,
+            "git_repo": git_repo,
             **kwargs,
         }
 
@@ -201,7 +238,9 @@ def _launch_single_job(
     dryrun: bool = False,
     template_name: str = "default",
     template_dir: Optional[Path] = None,
+    template_path: Optional[Path] = None,
     custom_sbatch_options: Optional[Dict[str, Any]] = None,
+    git_repo: Optional[Dict[str, str]] = None,
 ) -> None:
     """Helper function to launch a single slurm job.
 
@@ -210,7 +249,9 @@ def _launch_single_job(
         dryrun: Whether this is a dry run
         template_name: Name of template to use
         template_dir: Directory containing custom templates
+        template_path: Path to a specific template file
         custom_sbatch_options: Additional SBATCH options to override defaults
+        git_repo: Git repository info (url, branch, commit_sha) for cloning on compute node
     """
     combo = status_file.data["matrix"]
     working_directory = status_file.data["project"]["working_directory"]
@@ -221,7 +262,7 @@ def _launch_single_job(
     print(str(combo))
 
     # Initialize template renderer
-    renderer = SlurmTemplateRenderer(template_dir)
+    renderer = SlurmTemplateRenderer(template_dir, template_path)
 
     # Get default SBATCH options and merge with custom ones
     sbatch_options = get_default_sbatch_options(
@@ -241,6 +282,7 @@ def _launch_single_job(
         sbatch_options=sbatch_options,
         status_file=status_file.status_file,
         cleanup_temp_dir=True,
+        git_repo=git_repo,
     )
 
     # Write and submit the script
@@ -256,6 +298,8 @@ def relaunch_slurm_job(
     dryrun: bool = False,
     template_name: str = "default",
     template_dir: Optional[Path] = None,
+    template_path: Optional[Path] = None,
+    git_repo: Optional[Dict[str, str]] = None,
 ) -> None:
     """Relaunches a slurm job from a status file.
 
@@ -264,6 +308,8 @@ def relaunch_slurm_job(
         dryrun: Whether this is a dry run
         template_name: Name of template to use
         template_dir: Directory containing custom templates
+        template_path: Path to a specific template file
+        git_repo: Git repository info (url, branch, commit_sha) for cloning on compute node
     """
     # remove old runtime info
     if "end" in status_file.data["runtime"]:
@@ -272,7 +318,9 @@ def relaunch_slurm_job(
         del status_file.data["runtime"]["slurm_job_id"]
 
     status_file.write()
-    _launch_single_job(status_file, dryrun, template_name, template_dir)
+    _launch_single_job(
+        status_file, dryrun, template_name, template_dir, template_path, None, git_repo
+    )
 
 
 def launch_slurm_jobs(
@@ -281,7 +329,9 @@ def launch_slurm_jobs(
     dryrun: bool = False,
     template_name: str = "default",
     template_dir: Optional[Path] = None,
+    template_path: Optional[Path] = None,
     custom_sbatch_options: Optional[Dict[str, Any]] = None,
+    git_repo: Optional[Dict[str, str]] = None,
 ) -> None:
     """Launch SLURM jobs for a workflow.
 
@@ -291,7 +341,9 @@ def launch_slurm_jobs(
         dryrun: Whether this is a dry run
         template_name: Name of template to use
         template_dir: Directory containing custom templates
+        template_path: Path to a specific template file
         custom_sbatch_options: Additional SBATCH options to override defaults
+        git_repo: Git repository info (url, branch, commit_sha) for cloning on compute node
     """
     # get dir of workflow file
     parser = WorkflowParser(workflow_file)
@@ -309,5 +361,11 @@ def launch_slurm_jobs(
         )
         status_file.write()
         _launch_single_job(
-            status_file, dryrun, template_name, template_dir, custom_sbatch_options
+            status_file,
+            dryrun,
+            template_name,
+            template_dir,
+            template_path,
+            custom_sbatch_options,
+            git_repo,
         )

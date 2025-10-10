@@ -64,7 +64,18 @@ def slurm_run(args: argparse.Namespace) -> None:
     """Runs workflows on a Slurm cluster."""
     print("slurm-run subcommand called.")
     print(f"Arguments: {args}")
-    launch_slurm_jobs(args.workflow_file, args.working_directory, dryrun=args.dryrun)
+
+    # Handle template path if provided
+    template_path = None
+    if args.template:
+        template_path = Path(args.template)
+
+    launch_slurm_jobs(
+        args.workflow_file,
+        args.working_directory,
+        dryrun=args.dryrun,
+        template_path=template_path,
+    )
 
 
 def db_init(args: argparse.Namespace) -> None:
@@ -228,6 +239,10 @@ def main() -> None:
         action="store_true",
         help="Perform a dry run without executing jobs."
         + " (This will still submit the jobs to slurm and pull the dockerfiles.)",
+    )
+    parser_slurm.add_argument(
+        "--template",
+        help="Full path to jinja template file for SLURM job script generation.",
     )
     parser_slurm.set_defaults(func=slurm_run)
 

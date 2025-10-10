@@ -4,7 +4,6 @@
 import logging
 import os
 import requests
-import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -238,58 +237,9 @@ class GitWatcher:
         finally:
             session.close()
 
-    def _clone_repository(self, commit_sha: str) -> Optional[str]:
-        """Clone the repository at a specific commit to a temporary directory."""
-        import tempfile
-
-        try:
-            # Create temporary directory for this clone
-            temp_dir = tempfile.mkdtemp(prefix=f"slurm-ci-{self.config.daemon_name}-")
-            self.logger.info(f"Cloning repository to temporary directory: {temp_dir}")
-
-            # Clone the repository
-            subprocess.run(
-                [
-                    "git",
-                    "clone",
-                    "--depth",
-                    "1",
-                    "--branch",
-                    self.config.branch,
-                    self.config.repo_url,
-                    temp_dir,
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-
-            # Checkout specific commit
-            subprocess.run(
-                ["git", "checkout", commit_sha],
-                cwd=temp_dir,
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-
-            self.logger.info(f"Successfully cloned repository at commit: {commit_sha}")
-            return temp_dir
-
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"Error cloning repository: {e}")
-            self.logger.error(f"Command output: {e.stderr}")
-            return None
-
     def _trigger_ci_job(self, commit_sha: str) -> bool:
         """Trigger a CI job for the given commit."""
-        temp_dir = None
         try:
-            # Clone repository to temporary directory
-            temp_dir = self._clone_repository(commit_sha)
-            if not temp_dir:
-                return False
-
             # Construct workflow file path from config directory (not repo)
             workflow_file = Path(self.config.config_dir) / self.config.workflow_file
             if not workflow_file.exists():
@@ -298,12 +248,27 @@ class GitWatcher:
                 )
                 return False
 
+            # Prepare git repository information for SLURM jobs
+            git_repo = {
+                "url": self.config.repo_url,
+                "branch": self.config.branch,
+                "commit_sha": commit_sha,
+            }
+
             self.logger.info(f"Triggering CI job for commit: {commit_sha}")
             self.logger.info(f"Workflow file: {workflow_file}")
-            self.logger.info(f"Working directory: {temp_dir}")
+            self.logger.info(f"Repository: {self.config.repo_url}")
+            self.logger.info(f"Branch: {self.config.branch}")
 
-            # Launch slurm jobs
-            launch_slurm_jobs(str(workflow_file), temp_dir, dryrun=False)
+            # Launch slurm jobs with git repository info
+            # Use a placeholder working directory since the actual repo will be cloned on compute nodes
+            placeholder_workdir = "/tmp/placeholder"
+            launch_slurm_jobs(
+                str(workflow_file),
+                placeholder_workdir,
+                dryrun=False,
+                git_repo=git_repo,
+            )
 
             self.logger.info(f"Successfully triggered CI job for commit: {commit_sha}")
             return True
@@ -311,11 +276,6 @@ class GitWatcher:
         except Exception as e:
             self.logger.error(f"Error triggering CI job: {e}")
             return False
-        finally:
-            # Note: We don't clean up the temporary directory here because
-            # Slurm jobs run asynchronously and need access to the directory.
-            # The cleanup will be handled by the Slurm job script itself.
-            pass
 
     def _poll_once(self) -> None:
         """Perform one polling cycle."""

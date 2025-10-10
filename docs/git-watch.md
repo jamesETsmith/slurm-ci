@@ -7,8 +7,8 @@ The `git-watch` functionality allows you to automatically monitor GitHub reposit
 Git-watch runs as a daemon process that:
 1. Polls a GitHub repository at regular intervals
 2. Detects new commits on the specified branch
-3. Automatically clones the repository at the new commit
-4. Triggers `slurm-ci slurm-run` to execute CI workflows on the Slurm cluster
+3. Triggers `slurm-ci slurm-run` to execute CI workflows on the Slurm cluster
+4. Each SLURM job clones the repository directly on the compute node
 5. Tracks processed commits in the database to avoid duplicate runs
 
 ## Configuration
@@ -93,7 +93,7 @@ Git-watch creates the following directory structure:
 ├── slurm_ci.db                    # Extended with git tracking tables
 └── job_status/                    # Existing slurm job status files
 
-Note: Repositories are cloned to temporary directories and cleaned up after each job.
+Note: Repositories are cloned to temporary directories on each compute node and cleaned up after each job.
 ```
 
 ## Database Integration
