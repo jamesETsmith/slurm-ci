@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Daemon management for git-watch processes."""
 
+import json
 import os
 import signal
-import time
-import json
-import psutil
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
-from datetime import datetime
+
+import psutil
 
 from .git_watch_config import GitWatchConfig
 
@@ -16,7 +16,7 @@ from .git_watch_config import GitWatchConfig
 class DaemonManager:
     """Manages git-watch daemon processes."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.base_dir = Path.home() / ".slurm-ci" / "git-watch"
         self.pids_dir = self.base_dir / "pids"
         self.status_dir = self.base_dir / "status"
@@ -209,7 +209,7 @@ class DaemonManager:
     def setup_signal_handlers(self, daemon_name: str) -> None:
         """Set up signal handlers for graceful shutdown."""
 
-        def signal_handler(signum, frame):
+        def signal_handler(signum, frame) -> None:
             print(f"\nReceived signal {signum}, shutting down daemon {daemon_name}...")
             self.cleanup_daemon_files(daemon_name)
             exit(0)

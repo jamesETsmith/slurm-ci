@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+
 # Base slurm-ci directory
 SLURM_CI_DIR = Path.home() / ".slurm-ci"
 SLURM_CI_DIR.mkdir(exist_ok=True)

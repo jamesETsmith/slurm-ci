@@ -1,9 +1,10 @@
 import os
 import subprocess
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
-from jinja2 import Template, Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, Template
+
 from slurm_ci.status_file import StatusFile
 from slurm_ci.workflow_parser import WorkflowParser
 

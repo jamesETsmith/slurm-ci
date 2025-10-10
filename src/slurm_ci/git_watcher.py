@@ -3,11 +3,12 @@
 
 import logging
 import os
-import requests
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+import requests
 
 from .daemon_manager import DaemonManager
 from .database import CommitTracker, GitRepo, SessionLocal, init_db

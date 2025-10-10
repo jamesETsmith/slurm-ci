@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Configuration parser for git-watch functionality."""
 
-import toml
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+
+import toml
 
 
 @dataclass

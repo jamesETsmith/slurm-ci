@@ -1,8 +1,11 @@
 import os
 import time
+
 import pytest
+
 from slurm_ci.slurm_launcher import relaunch_slurm_job
 from slurm_ci.status_file import StatusFile
+
 
 cwd = os.path.dirname(os.path.abspath(__file__))
 project_dir = f"{cwd}/../sample_project"
@@ -22,7 +25,7 @@ def status_file(tmpdir):
     return sf
 
 
-def test_relaunch(status_file):
+def test_relaunch(status_file) -> None:
     """Test relaunching a job from a status file."""
     # Relaunch the job
     relaunch_slurm_job(status_file, dryrun=False)

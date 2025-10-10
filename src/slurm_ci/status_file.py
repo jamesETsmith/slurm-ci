@@ -1,12 +1,13 @@
-import os
 import hashlib
-import toml
+import os
 import subprocess
 import time
 from collections import OrderedDict
 
-from slurm_ci.config import STATUS_DIR
+import toml
+
 from slurm_ci import __version__ as slurm_ci_version
+from slurm_ci.config import STATUS_DIR
 
 
 # TODO add utils to get git hash, project name, git branch, and add them to file
@@ -19,7 +20,7 @@ class StatusFile:
         workflow_file: str,
         working_directory: str,
         matrix_args: dict,
-    ):
+    ) -> None:
         self.data = OrderedDict(
             {
                 # Project/workflow info
@@ -70,7 +71,7 @@ class StatusFile:
         with open(self.status_file, "r") as f:
             return toml.load(f)
 
-    def write(self):
+    def write(self) -> None:
         os.makedirs(STATUS_DIR, exist_ok=True)
         with open(self.status_file, "w") as f:
             toml.dump(self.data, f)

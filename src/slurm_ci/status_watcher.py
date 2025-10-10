@@ -1,20 +1,19 @@
 import json
-import os
 import time
-import toml
-import hashlib
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional
 
-from .database import SessionLocal, Build, Job
+import toml
+
 from .config import STATUS_DIR
+from .database import Build, Job, SessionLocal
 
 
 class StatusWatcher:
     """Watches the status directory and synchronizes TOML files with the database."""
 
-    def __init__(self, status_dir: str = None):
+    def __init__(self, status_dir: str = None) -> None:
         self.status_dir = Path(status_dir or STATUS_DIR)
         self._processed_files = {}  # filename -> last_modified_time
 
@@ -191,7 +190,7 @@ class StatusWatcher:
         finally:
             session.close()
 
-    def update_build_status(self, session, build: Build):
+    def update_build_status(self, session, build: Build) -> None:
         """Update build status based on its jobs."""
         jobs = session.query(Job).filter(Job.build_id == build.id).all()
 
@@ -220,7 +219,9 @@ class StatusWatcher:
         print(f"Synced {synced_count}/{len(files)} status files to database")
         return synced_count
 
-    def watch_directory(self, poll_interval: int = 30, sync_on_start: bool = True):
+    def watch_directory(
+        self, poll_interval: int = 30, sync_on_start: bool = True
+    ) -> None:
         """Watch the status directory for changes and sync to database."""
         print(f"Watching status directory: {self.status_dir}")
 
@@ -265,7 +266,7 @@ def sync_status_to_db(status_dir: str = None) -> int:
     return watcher.sync_all_files()
 
 
-def start_status_watcher(status_dir: str = None, poll_interval: int = 30):
+def start_status_watcher(status_dir: str = None, poll_interval: int = 30) -> None:
     """Start the status directory watcher."""
     watcher = StatusWatcher(status_dir)
     watcher.watch_directory(poll_interval)

@@ -2,13 +2,11 @@
 """Integration tests for git-watch CLI commands."""
 
 import os
-import tempfile
 import subprocess
-import time
-from pathlib import Path
+import tempfile
 
 
-def test_git_watch_create_config():
+def test_git_watch_create_config() -> None:
     """Test creating example configuration file."""
     with tempfile.TemporaryDirectory() as temp_dir:
         config_path = os.path.join(temp_dir, "test-config.toml")
@@ -43,7 +41,7 @@ def test_git_watch_create_config():
             assert "my-project-main" in content
 
 
-def test_git_watch_status_no_daemons():
+def test_git_watch_status_no_daemons() -> None:
     """Test status command when no daemons are running."""
     result = subprocess.run(
         ["python", "-m", "slurm_ci.cli", "git-watch", "status"],
@@ -58,7 +56,7 @@ def test_git_watch_status_no_daemons():
     assert "No git-watch daemons are currently running" in result.stdout
 
 
-def test_git_watch_stop_nonexistent_daemon():
+def test_git_watch_stop_nonexistent_daemon() -> None:
     """Test stopping a daemon that doesn't exist."""
     result = subprocess.run(
         ["python", "-m", "slurm_ci.cli", "git-watch", "stop", "nonexistent-daemon"],
@@ -71,7 +69,7 @@ def test_git_watch_stop_nonexistent_daemon():
     assert "No PID file found" in result.stdout or "not running" in result.stdout
 
 
-def test_git_watch_stop_all_no_daemons():
+def test_git_watch_stop_all_no_daemons() -> None:
     """Test stop-all command when no daemons are running."""
     result = subprocess.run(
         ["python", "-m", "slurm_ci.cli", "git-watch", "stop-all"],

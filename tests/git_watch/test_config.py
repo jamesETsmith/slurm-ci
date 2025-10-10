@@ -3,11 +3,13 @@
 
 import os
 import tempfile
+
 import pytest
+
 from slurm_ci.git_watch_config import GitWatchConfig
 
 
-def test_config_from_dict():
+def test_config_from_dict() -> None:
     """Test creating configuration from dictionary."""
     config_data = {
         "daemon": {"name": "test-daemon", "polling_interval": 600},
@@ -33,7 +35,7 @@ def test_config_from_dict():
     assert config.workflow_file == ".github/workflows/test.yml"
 
 
-def test_config_missing_required_fields():
+def test_config_missing_required_fields() -> None:
     """Test error handling for missing required fields."""
     config_data = {
         "daemon": {"name": "test-daemon"},
@@ -45,7 +47,7 @@ def test_config_missing_required_fields():
         GitWatchConfig.from_dict(config_data)
 
 
-def test_config_defaults():
+def test_config_defaults() -> None:
     """Test default values are applied correctly."""
     config_data = {
         "daemon": {"name": "test-daemon"},
@@ -61,7 +63,7 @@ def test_config_defaults():
     assert config.github_token is None  # default
 
 
-def test_config_validation():
+def test_config_validation() -> None:
     """Test configuration validation."""
     # Test polling interval too low
     config = GitWatchConfig(
@@ -90,7 +92,7 @@ def test_config_validation():
         config.validate()
 
 
-def test_get_repo_name():
+def test_get_repo_name() -> None:
     """Test repository name extraction."""
     config = GitWatchConfig(
         daemon_name="test",
@@ -109,7 +111,7 @@ def test_get_repo_name():
     assert config.get_repo_name() == "user/repo"
 
 
-def test_config_from_file():
+def test_config_from_file() -> None:
     """Test loading configuration from TOML file."""
     config_content = """
 [daemon]
@@ -142,7 +144,7 @@ workflow_file = "workflows/test.yml"
             os.unlink(f.name)
 
 
-def test_config_file_not_found():
+def test_config_file_not_found() -> None:
     """Test error handling for missing configuration file."""
     with pytest.raises(FileNotFoundError):
         GitWatchConfig.from_file("/nonexistent/config.toml")

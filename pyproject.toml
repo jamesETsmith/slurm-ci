@@ -24,8 +24,9 @@ dependencies = [
     "docker",
     "toml",
     "psutil",
-    "pytest",
     "jinja2",
+    "pytest",
+    "ruff",
 ]
 
 [project.urls]
