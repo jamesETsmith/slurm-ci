@@ -197,14 +197,12 @@ def get_default_sbatch_options(
     Returns:
         Dictionary of SBATCH options
     """
-    gfx_arch = combo.get("gpu_arch", "gfx942")
 
     return {
         "job-name": task_name,
         "output": logfile_path,
         "time": "24:00:00",
         "cpus-per-task": 32,
-        "gres": f"gpu:{gfx_arch}",
     }
 
 

@@ -7,7 +7,12 @@ from sqlalchemy.orm import joinedload
 from .database import Build, Job, SessionLocal
 
 
-app = Flask(__name__)
+# Get the directory where this file is located
+current_dir = os.path.dirname(os.path.abspath(__file__))
+template_dir = os.path.join(current_dir, "templates")
+static_dir = os.path.join(current_dir, "static")
+
+app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 
 
 def format_json_filter(json_string: str) -> str:
@@ -156,6 +161,123 @@ def download_log(job_id: int) -> Response:
         return send_file(job.log_file_path, as_attachment=True)
     except Exception as e:
         abort(500, description=f"Error sending log file: {str(e)}")
+
+
+@app.route("/job/<int:job_id>/status")
+def job_status(job_id: int) -> Response:
+    """Serve the status file for a specific job."""
+    db = SessionLocal()
+    job = db.query(Job).filter(Job.id == job_id).first()
+    db.close()
+
+    if not job:
+        abort(404)
+
+    if not job.status_file_path:
+        abort(404, description="No status file available for this job")
+
+    status_file_path = job.status_file_path
+    if not os.path.exists(status_file_path):
+        # Check if file exists and provide more detailed error
+        from pathlib import Path
+
+        status_dir = Path(status_file_path).parent
+        if not status_dir.exists():
+            abort(404, description=f"Status directory does not exist: {status_dir}")
+        else:
+            abort(404, description=f"Status file not found: {status_file_path}")
+
+    try:
+        # Read the status file and wrap it with HTML for better display
+        with open(status_file_path, "r", encoding="utf-8") as f:
+            status_content = f.read()
+
+        # Create HTML wrapper with syntax highlighting for TOML
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Status File - {job.name}</title>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            line-height: 1.6;
+        }}
+        .header {{
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }}
+        .content {{
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        pre {{
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            margin: 0;
+        }}
+        .btn {{
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-right: 10px;
+        }}
+        .btn:hover {{
+            background-color: #0056b3;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Status File: {job.name}</h1>
+        <p><strong>Job ID:</strong> {job.id}</p>
+        <p><strong>File Path:</strong> <code>{status_file_path}</code></p>
+        <a href="/job/{job.id}/status/download" class="btn">Download</a>
+        <a href="javascript:history.back()" class="btn">Back</a>
+    </div>
+    <div class="content">
+        <pre><code>{status_content}</code></pre>
+    </div>
+</body>
+</html>"""
+
+        return Response(html_content, mimetype="text/html")
+    except Exception as e:
+        abort(500, description=f"Error reading status file: {str(e)}")
+
+
+@app.route("/job/<int:job_id>/status/download")
+def download_status(job_id: int) -> Response:
+    """Serve the status file for a specific job as a download."""
+    db = SessionLocal()
+    job = db.query(Job).filter(Job.id == job_id).first()
+    db.close()
+
+    if not job:
+        abort(404)
+
+    if not job.status_file_path or not os.path.exists(job.status_file_path):
+        abort(404, description="Status file not found")
+
+    try:
+        return send_file(job.status_file_path, as_attachment=True)
+    except Exception as e:
+        abort(500, description=f"Error sending status file: {str(e)}")
 
 
 @app.route("/debug/logs")

@@ -42,6 +42,7 @@
                     </div>
                 </th>
                 <th>Log</th>
+                <th>Status File</th>
             </tr>
         </thead>
         <tbody>
@@ -81,8 +82,8 @@
                 </td>
                 <td>
                     {% if job.log_file_path %}
-                        <a href="{{ url_for('job_log', job_id=job.id) }}" class="btn" target="_blank">View</a>
-                        <a href="{{ url_for('download_log', job_id=job.id) }}" class="btn">Download</a>
+                        <a href="{{ url_for('job_log', job_id=job.id) }}" class="btn" target="_blank">View Log</a>
+                        <a href="{{ url_for('download_log', job_id=job.id) }}" class="btn">Download Log</a>
                     {% endif %}
                     {% if job.logs %}
                         <details class="log-details">
@@ -91,10 +92,18 @@
                         </details>
                     {% endif %}
                 </td>
+                <td>
+                    {% if job.status_file_path %}
+                        <a href="{{ url_for('job_status', job_id=job.id) }}" class="btn" target="_blank">View Status</a>
+                        <a href="{{ url_for('download_status', job_id=job.id) }}" class="btn">Download Status</a>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
             </tr>
             {% else %}
             <tr>
-                {% set colspan = matrix_arg_keys|length + 3 %}
+                {% set colspan = matrix_arg_keys|length + 4 %}
                 <td colspan="{{ colspan }}">No jobs found for this build.</td>
             </tr>
             {% endfor %}
