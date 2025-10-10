@@ -225,17 +225,15 @@ class GitWatcher:
             session.close()
 
     def _clone_repository(self, commit_sha: str) -> Optional[str]:
-        """Clone the repository at a specific commit."""
-        working_dir = self.config.get_working_directory()
+        """Clone the repository at a specific commit to a temporary directory."""
+        import tempfile
 
         try:
-            # Remove existing directory if it exists
-            working_path = Path(working_dir)
-            if working_path.exists():
-                subprocess.run(["rm", "-rf", str(working_path)], check=True)
+            # Create temporary directory for this clone
+            temp_dir = tempfile.mkdtemp(prefix=f"slurm-ci-{self.config.daemon_name}-")
+            self.logger.info(f"Cloning repository to temporary directory: {temp_dir}")
 
             # Clone the repository
-            self.logger.info(f"Cloning repository to: {working_dir}")
             subprocess.run(
                 [
                     "git",
@@ -245,7 +243,7 @@ class GitWatcher:
                     "--branch",
                     self.config.branch,
                     self.config.repo_url,
-                    working_dir,
+                    temp_dir,
                 ],
                 check=True,
                 capture_output=True,
@@ -255,14 +253,14 @@ class GitWatcher:
             # Checkout specific commit
             subprocess.run(
                 ["git", "checkout", commit_sha],
-                cwd=working_dir,
+                cwd=temp_dir,
                 check=True,
                 capture_output=True,
                 text=True,
             )
 
             self.logger.info(f"Successfully cloned repository at commit: {commit_sha}")
-            return working_dir
+            return temp_dir
 
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Error cloning repository: {e}")
@@ -271,24 +269,27 @@ class GitWatcher:
 
     def _trigger_ci_job(self, commit_sha: str) -> bool:
         """Trigger a CI job for the given commit."""
+        temp_dir = None
         try:
-            # Clone repository
-            working_dir = self._clone_repository(commit_sha)
-            if not working_dir:
+            # Clone repository to temporary directory
+            temp_dir = self._clone_repository(commit_sha)
+            if not temp_dir:
                 return False
 
-            # Construct workflow file path
-            workflow_file = Path(working_dir) / self.config.workflow_file
+            # Construct workflow file path from config directory (not repo)
+            workflow_file = Path(self.config.config_dir) / self.config.workflow_file
             if not workflow_file.exists():
-                self.logger.error(f"Workflow file not found: {workflow_file}")
+                self.logger.error(
+                    f"Workflow file not found in config dir: {workflow_file}"
+                )
                 return False
 
             self.logger.info(f"Triggering CI job for commit: {commit_sha}")
             self.logger.info(f"Workflow file: {workflow_file}")
-            self.logger.info(f"Working directory: {working_dir}")
+            self.logger.info(f"Working directory: {temp_dir}")
 
             # Launch slurm jobs
-            launch_slurm_jobs(str(workflow_file), working_dir, dryrun=False)
+            launch_slurm_jobs(str(workflow_file), temp_dir, dryrun=False)
 
             self.logger.info(f"Successfully triggered CI job for commit: {commit_sha}")
             return True
@@ -296,6 +297,16 @@ class GitWatcher:
         except Exception as e:
             self.logger.error(f"Error triggering CI job: {e}")
             return False
+        finally:
+            # Clean up temporary directory
+            if temp_dir and Path(temp_dir).exists():
+                try:
+                    subprocess.run(["rm", "-rf", temp_dir], check=True)
+                    self.logger.debug(f"Cleaned up temporary directory: {temp_dir}")
+                except subprocess.CalledProcessError as e:
+                    self.logger.warning(
+                        f"Failed to clean up temp directory {temp_dir}: {e}"
+                    )
 
     def _poll_once(self) -> None:
         """Perform one polling cycle."""

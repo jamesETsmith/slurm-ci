@@ -27,7 +27,7 @@ github_token = "optional_for_private_repos"
 
 [slurm-ci]
 config_dir = "/path/to/slurm-ci-configs"
-workflow_file = ".github/workflows/ci.yml"
+workflow_file = "workflows/ci.yml"
 ```
 
 ### Configuration Options
@@ -43,7 +43,7 @@ workflow_file = ".github/workflows/ci.yml"
 
 #### `[slurm-ci]` section
 - `config_dir`: Directory containing slurm-ci configuration files (required)
-- `workflow_file`: Path to GitHub Actions workflow file relative to repo root (default: ".github/workflows/ci.yml")
+- `workflow_file`: Path to workflow file relative to config_dir (default: "workflows/ci.yml")
 
 ## Usage
 
@@ -88,12 +88,12 @@ Git-watch creates the following directory structure:
 │   │   └── {daemon_name}.pid      # Process ID files
 │   ├── status/
 │   │   └── {daemon_name}.status   # Status information (JSON)
-│   ├── logs/
-│   │   └── {daemon_name}.log      # Daemon log files
-│   └── repos/
-│       └── {repo}_{daemon}/       # Cloned repositories
+│   └── logs/
+│       └── {daemon_name}.log      # Daemon log files
 ├── slurm_ci.db                    # Extended with git tracking tables
 └── job_status/                    # Existing slurm job status files
+
+Note: Repositories are cloned to temporary directories and cleaned up after each job.
 ```
 
 ## Database Integration
@@ -107,6 +107,25 @@ This ensures that:
 - Commits are only processed once
 - Daemon state persists across restarts
 - You can track the history of triggered builds
+
+## Workflow File Location
+
+**Important**: The workflow file is read from your **config directory**, not from the cloned repository. This allows you to:
+- Use standardized slurm-ci workflows across multiple repositories
+- Maintain workflow files separately from the source code
+- Avoid requiring each repository to have specific GitHub Actions files
+
+Example directory structure:
+```
+/path/to/slurm-ci-configs/
+├── workflows/
+│   ├── ci.yml              # Your custom slurm-ci workflow
+│   └── nightly.yml         # Additional workflows
+├── matrix-configs/
+│   └── gpu-matrix.yml      # Matrix configurations
+└── environment/
+    └── env-vars.yml        # Environment settings
+```
 
 ## GitHub API Integration
 

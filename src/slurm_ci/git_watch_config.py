@@ -22,7 +22,7 @@ class GitWatchConfig:
 
     # Slurm settings
     config_dir: str
-    workflow_file: str = ".github/workflows/ci.yml"
+    workflow_file: str = "workflows/ci.yml"
 
     @classmethod
     def from_file(cls, config_path: str) -> "GitWatchConfig":
@@ -65,7 +65,7 @@ class GitWatchConfig:
             branch=repo_config.get("branch", "main"),
             github_token=repo_config.get("github_token"),
             config_dir=slurm_config["config_dir"],
-            workflow_file=slurm_config.get("workflow_file", ".github/workflows/ci.yml"),
+            workflow_file=slurm_config.get("workflow_file", "workflows/ci.yml"),
         )
 
     def validate(self) -> None:
@@ -90,15 +90,6 @@ class GitWatchConfig:
         else:
             raise ValueError(f"Cannot parse repository name from URL: {self.repo_url}")
 
-    def get_working_directory(self) -> str:
-        """Get the working directory for cloned repositories."""
-        git_watch_dir = Path.home() / ".slurm-ci" / "git-watch"
-        git_watch_dir.mkdir(parents=True, exist_ok=True)
-
-        repo_name = self.get_repo_name().replace("/", "_")
-        working_dir = git_watch_dir / "repos" / f"{repo_name}_{self.daemon_name}"
-        return str(working_dir)
-
 
 def create_example_config(output_path: str) -> None:
     """Create an example configuration file."""
@@ -114,7 +105,7 @@ def create_example_config(output_path: str) -> None:
         },
         "slurm-ci": {
             "config_dir": "/path/to/slurm-ci-configs",
-            "workflow_file": ".github/workflows/ci.yml",
+            "workflow_file": "workflows/ci.yml",
         },
     }
 

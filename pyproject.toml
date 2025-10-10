@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -49,3 +49,6 @@ select = ["E", "F", "W", "I", "ANN"]
 [tool.ruff.lint.isort]
 # Sorts imports automatically
 lines-after-imports = 2
+
+[tool.setuptools_scm]
+# This enables setuptools-scm to generate versions from git tags

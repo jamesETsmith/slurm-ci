@@ -18,7 +18,7 @@ def test_config_from_dict():
         },
         "slurm-ci": {
             "config_dir": "/tmp/test-config",
-            "workflow_file": ".github/workflows/test.yml",
+            "workflow_file": "workflows/test.yml",
         },
     }
 
@@ -57,7 +57,7 @@ def test_config_defaults():
 
     assert config.polling_interval == 300  # default
     assert config.branch == "main"  # default
-    assert config.workflow_file == ".github/workflows/ci.yml"  # default
+    assert config.workflow_file == "workflows/ci.yml"  # default
     assert config.github_token is None  # default
 
 
@@ -122,7 +122,7 @@ branch = "develop"
 
 [slurm-ci]
 config_dir = "/tmp/test-config"
-workflow_file = ".github/workflows/test.yml"
+workflow_file = "workflows/test.yml"
 """
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
@@ -137,7 +137,7 @@ workflow_file = ".github/workflows/test.yml"
             assert config.repo_url == "https://github.com/user/repo"
             assert config.branch == "develop"
             assert config.config_dir == "/tmp/test-config"
-            assert config.workflow_file == ".github/workflows/test.yml"
+            assert config.workflow_file == "workflows/test.yml"
         finally:
             os.unlink(f.name)
 
