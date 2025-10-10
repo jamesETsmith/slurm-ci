@@ -1,4 +1,5 @@
 import datetime
+from enum import Enum
 
 from sqlalchemy import (
     Boolean,
@@ -12,6 +13,17 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
+
+
+class CommitStatus(Enum):
+    """Enum for commit processing status."""
+
+    PENDING = "pending"  # Never seen before, should launch job
+    RUNNING = "running"  # Job is currently running, do not launch
+    COMPLETED = "completed"  # Job completed successfully, do not launch
+    FAILED = "failed"  # Job completed with failure, do not launch
+    EXCEPTION = "exception"  # Job had exception/corruption, should relaunch
+
 
 from . import config
 
@@ -77,8 +89,15 @@ class CommitTracker(Base):
     repo_id = Column(Integer, ForeignKey("git_repos.id"))
     commit_sha = Column(String, index=True)
     processed_at = Column(DateTime, default=datetime.datetime.utcnow)
-    build_triggered = Column(Boolean, default=False)
+    build_triggered = Column(Boolean, default=False)  # Keep for backward compatibility
     build_id = Column(Integer, ForeignKey("builds.id"), nullable=True)
+    # New status field for better tracking
+    status = Column(
+        String, default="pending"
+    )  # pending, running, completed, failed, exception
+    last_updated = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
     repo = relationship("GitRepo", back_populates="commit_trackers")
     build = relationship("Build")
 

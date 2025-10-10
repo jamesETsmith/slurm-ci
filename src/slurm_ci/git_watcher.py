@@ -4,6 +4,7 @@
 import logging
 import os
 import time
+import toml
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -12,7 +13,7 @@ import subprocess
 import requests
 
 from .daemon_manager import DaemonManager
-from .database import CommitTracker, GitRepo, SessionLocal, init_db
+from .database import CommitTracker, CommitStatus, GitRepo, SessionLocal, init_db
 from .git_watch_config import GitWatchConfig
 from .slurm_launcher import launch_slurm_jobs
 
@@ -50,16 +51,16 @@ class GitWatcher:
     def _setup_logging(self) -> logging.Logger:
         """Set up logging for the daemon."""
         logger = logging.getLogger(f"git-watch-{self.config.daemon_name}")
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logging.DEBUG)
 
         # Create file handler
         log_file = self.daemon_manager.get_log_file(self.config.daemon_name)
         file_handler = logging.FileHandler(log_file)
-        file_handler.setLevel(logging.INFO)
+        file_handler.setLevel(logging.DEBUG)
 
         # Create console handler
         console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
+        console_handler.setLevel(logging.DEBUG)
 
         # Create formatter
         formatter = logging.Formatter(
@@ -144,8 +145,8 @@ class GitWatcher:
             self.logger.error(f"Error fetching latest commit: {e}")
             return None
 
-    def _is_commit_processed(self, commit_sha: str) -> bool:
-        """Check if a commit has already been processed."""
+    def _should_process_commit(self, commit_sha: str) -> bool:
+        """Check if a commit should be processed based on its current status."""
         session = SessionLocal()
         try:
             repo = (
@@ -155,7 +156,10 @@ class GitWatcher:
             )
 
             if not repo:
-                return False
+                self.logger.info(
+                    f"Repository not found, will process commit: {commit_sha}"
+                )
+                return True
 
             tracker = (
                 session.query(CommitTracker)
@@ -166,17 +170,45 @@ class GitWatcher:
                 .first()
             )
 
-            return tracker is not None
+            if not tracker:
+                self.logger.info(f"New commit detected, will process: {commit_sha}")
+                return True
+
+            # Check status to determine if we should process
+            status = tracker.status
+            self.logger.info(f"Commit {commit_sha} has status: {status}")
+
+            if status in [CommitStatus.PENDING.value, CommitStatus.EXCEPTION.value]:
+                self.logger.info(
+                    f"Commit {commit_sha} should be processed (status: {status})"
+                )
+                return True
+            elif status in [
+                CommitStatus.RUNNING.value,
+                CommitStatus.COMPLETED.value,
+                CommitStatus.FAILED.value,
+            ]:
+                self.logger.info(
+                    f"Commit {commit_sha} should NOT be processed (status: {status})"
+                )
+                return False
+            else:
+                self.logger.warning(
+                    f"Unknown status {status} for commit {commit_sha}, will process"
+                )
+                return True
+
         finally:
             session.close()
 
-    def _mark_commit_processed(
+    def _update_commit_status(
         self,
         commit_sha: str,
+        status: CommitStatus,
         build_triggered: bool = False,
         build_id: Optional[int] = None,
     ) -> None:
-        """Mark a commit as processed in the database."""
+        """Update commit status in the database."""
         session = SessionLocal()
         try:
             repo = (
@@ -193,22 +225,160 @@ class GitWatcher:
             repo.last_commit_sha = commit_sha
             repo.last_checked_at = datetime.utcnow()
 
-            # Create commit tracker entry
-            tracker = CommitTracker(
-                repo_id=repo.id,
-                commit_sha=commit_sha,
-                build_triggered=build_triggered,
-                build_id=build_id,
+            # Check if tracker already exists
+            tracker = (
+                session.query(CommitTracker)
+                .filter(
+                    CommitTracker.repo_id == repo.id,
+                    CommitTracker.commit_sha == commit_sha,
+                )
+                .first()
             )
-            session.add(tracker)
+
+            if tracker:
+                # Update existing tracker
+                tracker.status = status.value
+                tracker.build_triggered = build_triggered
+                if build_id:
+                    tracker.build_id = build_id
+                tracker.last_updated = datetime.utcnow()
+                self.logger.info(
+                    f"Updated commit {commit_sha} status to: {status.value}"
+                )
+            else:
+                # Create new tracker entry
+                tracker = CommitTracker(
+                    repo_id=repo.id,
+                    commit_sha=commit_sha,
+                    build_triggered=build_triggered,
+                    build_id=build_id,
+                    status=status.value,
+                )
+                session.add(tracker)
+                self.logger.info(
+                    f"Created new commit tracker for {commit_sha} with status: {status.value}"
+                )
+
             session.commit()
 
-            self.logger.info(f"Marked commit as processed: {commit_sha}")
         except Exception as e:
             session.rollback()
-            self.logger.error(f"Error marking commit as processed: {e}")
+            self.logger.error(f"Error updating commit status: {e}")
         finally:
             session.close()
+
+    def _check_running_jobs(self) -> None:
+        """Check status of running jobs and update commit status accordingly."""
+        from .config import STATUS_DIR
+
+        session = SessionLocal()
+        try:
+            repo = (
+                session.query(GitRepo)
+                .filter(GitRepo.daemon_name == self.config.daemon_name)
+                .first()
+            )
+
+            if not repo:
+                return
+
+            # Get all running commits
+            running_commits = (
+                session.query(CommitTracker)
+                .filter(
+                    CommitTracker.repo_id == repo.id,
+                    CommitTracker.status == CommitStatus.RUNNING.value,
+                )
+                .all()
+            )
+
+            for tracker in running_commits:
+                commit_sha = tracker.commit_sha
+                self.logger.debug(f"Checking status of running commit: {commit_sha}")
+
+                # Look for status files related to this commit
+                status_files = self._find_status_files_for_commit(commit_sha)
+
+                if not status_files:
+                    self.logger.debug(f"No status files found for commit {commit_sha}")
+                    continue
+
+                # Check if all jobs are complete
+                all_complete = True
+                any_failed = False
+                any_exception = False
+
+                for status_file in status_files:
+                    try:
+                        with open(status_file, "r") as f:
+                            status_data = toml.load(f)
+
+                        runtime = status_data.get("runtime", {})
+                        if "end" not in runtime:
+                            # Job still running
+                            all_complete = False
+                            break
+
+                        exit_code = runtime.get("exit_code")
+                        if exit_code is None:
+                            # Corrupted status file
+                            any_exception = True
+                        elif exit_code != 0:
+                            any_failed = True
+
+                    except Exception as e:
+                        self.logger.warning(
+                            f"Error reading status file {status_file}: {e}"
+                        )
+                        any_exception = True
+
+                if all_complete:
+                    if any_exception:
+                        new_status = CommitStatus.EXCEPTION
+                        self.logger.info(
+                            f"Commit {commit_sha} completed with exceptions, will retry"
+                        )
+                    elif any_failed:
+                        new_status = CommitStatus.FAILED
+                        self.logger.info(f"Commit {commit_sha} completed with failures")
+                    else:
+                        new_status = CommitStatus.COMPLETED
+                        self.logger.info(f"Commit {commit_sha} completed successfully")
+
+                    self._update_commit_status(commit_sha, new_status)
+
+        except Exception as e:
+            self.logger.error(f"Error checking running jobs: {e}")
+        finally:
+            session.close()
+
+    def _find_status_files_for_commit(self, commit_sha: str) -> list:
+        """Find all status files related to a specific commit."""
+        from .config import STATUS_DIR
+
+        status_files = []
+        status_dir = Path(STATUS_DIR)
+
+        if not status_dir.exists():
+            return status_files
+
+        # Look through all .toml files in status directory
+        for status_file in status_dir.glob("*.toml"):
+            try:
+                with open(status_file, "r") as f:
+                    status_data = toml.load(f)
+
+                git_info = status_data.get("git", {})
+                if git_info.get("commit", "").startswith(
+                    commit_sha[:8]
+                ):  # Match first 8 chars
+                    status_files.append(status_file)
+
+            except Exception as e:
+                self.logger.debug(f"Error reading status file {status_file}: {e}")
+                continue
+
+        return status_files
 
     def _trigger_ci_job(self, commit_sha: str) -> bool:
         """Trigger a CI job for the given commit."""
@@ -256,24 +426,38 @@ class GitWatcher:
         """Perform one polling cycle."""
         self.logger.debug("Starting polling cycle")
 
+        # First, check status of any running jobs
+        self._check_running_jobs()
+
         # Fetch latest commit
         latest_commit = self._fetch_latest_commit()
         if not latest_commit:
             self.logger.warning("Could not fetch latest commit")
             return
 
-        # Check if commit has been processed
-        if self._is_commit_processed(latest_commit):
-            self.logger.debug(f"Commit already processed: {latest_commit}")
+        # Check if commit should be processed
+        if not self._should_process_commit(latest_commit):
+            self.logger.debug(f"Commit should not be processed: {latest_commit}")
             return
 
-        self.logger.info(f"New commit detected: {latest_commit}")
+        self.logger.info(f"Processing commit: {latest_commit}")
+
+        # Mark commit as running before triggering job
+        self._update_commit_status(
+            latest_commit, CommitStatus.RUNNING, build_triggered=True
+        )
 
         # Trigger CI job
         job_triggered = self._trigger_ci_job(latest_commit)
 
-        # Mark commit as processed
-        self._mark_commit_processed(latest_commit, build_triggered=job_triggered)
+        if not job_triggered:
+            # If job failed to trigger, mark as exception for retry
+            self._update_commit_status(
+                latest_commit, CommitStatus.EXCEPTION, build_triggered=False
+            )
+            self.logger.error(
+                f"Failed to trigger job for commit {latest_commit}, marked as exception"
+            )
 
         # Update status file
         self.daemon_manager.write_status_file(
@@ -293,14 +477,17 @@ class GitWatcher:
 
         # Set up signal handlers
         self.daemon_manager.setup_signal_handlers(self.config.daemon_name)
+        self.logger.info(f"Signal handlers setup for {self.config.daemon_name}")
 
         # Write PID file
         self.daemon_manager.write_pid_file(self.config.daemon_name, os.getpid())
+        self.logger.info(f"PID file written for {self.config.daemon_name}")
 
         # Write initial status file
         self.daemon_manager.write_status_file(
             self.config.daemon_name, self.config, status="starting"
         )
+        self.logger.info(f"Status file written for {self.config.daemon_name}")
 
         try:
             while True:
