@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 
 from jinja2 import Environment, FileSystemLoader, Template
 
+import slurm_ci
 from slurm_ci.status_file import StatusFile
 from slurm_ci.workflow_parser import WorkflowParser
 
@@ -203,6 +204,8 @@ def get_default_sbatch_options(
         "output": logfile_path,
         "time": "24:00:00",
         "cpus-per-task": 32,
+        # TODO this is just because of the cluster I'm working on
+        "gres": "gpu:gfx90a-mi210x",
     }
 
 
@@ -228,8 +231,7 @@ def build_act_command(
     if dryrun:
         act_args += " --dryrun"
 
-    # TODO: Make act binary path configurable
-    return f"~/apps/nektos/bin/act {act_args}"
+    return f"{slurm_ci.config.ACT_BINARY} {act_args}"
 
 
 def _launch_single_job(
@@ -283,6 +285,11 @@ def _launch_single_job(
         cleanup_temp_dir=True,
         git_repo=git_repo,
     )
+
+    # Add slurm script to status file
+    status_file.data["slurm"] = {}
+    status_file.data["slurm"]["slurm_script"] = slurm_script
+    status_file.write()
 
     # Write and submit the script
     slurm_script_path = f"/tmp/sbatch_{task_name}.sh"

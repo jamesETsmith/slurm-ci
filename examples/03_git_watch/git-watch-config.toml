@@ -29,5 +29,9 @@ config_dir = "/home/AMD/jamesmit/apps/slurm-ci/.github/workflows"
 # This is your custom slurm-ci workflow file (not from the repository)
 workflow_file = "ci.yml"
 
-
-# Maybe pass slurm options here??
+# Custom SLURM batch options
+# These will override the default options and be passed to sbatch
+[slurm-ci.slurm]
+gres = "gpu:gfx942"
+cpus-per-task = 32
+time = "12:00:00"

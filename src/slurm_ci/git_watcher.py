@@ -3,14 +3,14 @@
 
 import logging
 import os
+import subprocess
 import time
-import toml
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-import subprocess
 
 import requests
+import toml
 
 from .daemon_manager import DaemonManager
 from .database import CommitTracker, CommitStatus, GitRepo, SessionLocal, init_db
@@ -256,7 +256,8 @@ class GitWatcher:
                 )
                 session.add(tracker)
                 self.logger.info(
-                    f"Created new commit tracker for {commit_sha} with status: {status.value}"
+                    f"Created new commit tracker for {commit_sha} "
+                    f"with status: {status.value}"
                 )
 
             session.commit()
@@ -269,8 +270,6 @@ class GitWatcher:
 
     def _check_running_jobs(self) -> None:
         """Check status of running jobs and update commit status accordingly."""
-        from .config import STATUS_DIR
-
         session = SessionLocal()
         try:
             repo = (
@@ -404,7 +403,8 @@ class GitWatcher:
             self.logger.info(f"Branch: {self.config.branch}")
 
             # Launch slurm jobs with git repository info
-            # Use a placeholder working directory since the actual repo will be cloned on compute nodes
+            # Use a placeholder working directory since the actual repo will be
+            # cloned on compute nodes
             placeholder_workdir = "/tmp/placeholder"
             launch_slurm_jobs(
                 str(workflow_file),
@@ -413,6 +413,7 @@ class GitWatcher:
                 git_repo=git_repo,
                 git_repo_url=self.config.repo_url,
                 git_repo_branch=self.config.branch,
+                custom_sbatch_options=self.config.slurm_options,
             )
 
             self.logger.info(f"Successfully triggered CI job for commit: {commit_sha}")

@@ -3,7 +3,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import toml
 
@@ -22,6 +22,7 @@ class GitWatchConfig:
     branch: str = "main"
     github_token: Optional[str] = None
     workflow_file: str = "workflows/ci.yml"
+    slurm_options: Optional[Dict[str, Any]] = None
 
     @classmethod
     def from_file(cls, config_path: str) -> "GitWatchConfig":
@@ -65,6 +66,7 @@ class GitWatchConfig:
             github_token=repo_config.get("github_token"),
             config_dir=slurm_config["config_dir"],
             workflow_file=slurm_config.get("workflow_file", "workflows/ci.yml"),
+            slurm_options=slurm_config.get("slurm"),
         )
 
     def validate(self) -> None:
@@ -105,6 +107,12 @@ def create_example_config(output_path: str) -> None:
         "slurm-ci": {
             "config_dir": "/path/to/slurm-ci-configs",
             "workflow_file": "workflows/ci.yml",
+            "slurm": {
+                "gres": "gpu:gfx942",
+                "cpus-per-task": 32,
+                "time": "12:00:00",
+                "partition": "gpu",
+            },
         },
     }
 

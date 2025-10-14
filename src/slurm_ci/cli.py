@@ -11,9 +11,15 @@ from slurm_ci.config import ACT_BINARY, ACT_PATH
 from slurm_ci.daemon_manager import DaemonManager
 from slurm_ci.dashboard import app
 from slurm_ci.database import init_db
-from slurm_ci.git_watch_config import create_example_config
 from slurm_ci.git_watcher import start_git_watcher
+from slurm_ci.git_watch_config import (
+    create_example_config as create_git_watch_example_config,
+)
 from slurm_ci.slurm_launcher import launch_slurm_jobs, relaunch_slurm_job
+from slurm_ci.slurm_run_config import (
+    SlurmRunConfig,
+    create_example_config as create_slurm_run_example_config,
+)
 from slurm_ci.status_file import StatusFile
 from slurm_ci.status_watcher import start_status_watcher, sync_status_to_db
 
@@ -60,21 +66,72 @@ def relaunch_run(args: argparse.Namespace) -> None:
     relaunch_slurm_job(status_file, dryrun=False)
 
 
+def generate_slurm_run_config_template(
+    output_path: str = "slurm-run-config.toml",
+) -> None:
+    """Generates a template config file for slurm-run."""
+    print(f"Generating slurm-run config template at: {output_path}")
+    create_slurm_run_example_config(output_path)
+    print("Template generated successfully.")
+
+
 def slurm_run(args: argparse.Namespace) -> None:
-    """Runs workflows on a Slurm cluster."""
+    """Runs workflows on a Slurm cluster.
+
+    There are 3 options here:
+    1) You specify a workflow file and directory and it runs with the default SLURM
+       options.
+    2) You specify only a toml config file where slurm-ci reads, workflow file and
+       directory and slurm options from the config file.
+    3) Generate a config file template for the user to fill out
+    """
     print("slurm-run subcommand called.")
     print(f"Arguments: {args}")
+
+    if args.generate_template:
+        generate_slurm_run_config_template()
+        return
 
     # Handle template path if provided
     template_path = None
     if args.template:
         template_path = Path(args.template)
 
+    # Handle custom slurm options from config file
+    custom_sbatch_options = None
+    workflow_file = args.workflow_file
+    working_directory = args.working_directory
+
+    if args.config:
+        if args.workflow_file or args.working_directory:
+            print(
+                "Error: Cannot specify both --config and"
+                " --workflow-file/--working-directory"
+            )
+            sys.exit(1)
+        try:
+            config = SlurmRunConfig.from_file(args.config)
+            custom_sbatch_options = config.slurm_options
+            workflow_file = config.workflow_file
+            working_directory = config.working_directory
+            if custom_sbatch_options:
+                print(
+                    f"Using custom SLURM options from config: {custom_sbatch_options}"
+                )
+        except Exception as e:
+            print(f"Warning: Could not load config file {args.config}: {e}")
+    elif not (args.workflow_file and args.working_directory):
+        print(
+            "Error: Must specify either --config or --workflow-file/--working-directory"
+        )
+        sys.exit(1)
+
     launch_slurm_jobs(
-        args.workflow_file,
-        args.working_directory,
+        workflow_file,
+        working_directory,
         dryrun=args.dryrun,
         template_path=template_path,
+        custom_sbatch_options=custom_sbatch_options,
     )
 
 
@@ -205,7 +262,7 @@ def git_watch_status(args: argparse.Namespace) -> None:
 def git_watch_create_config(args: argparse.Namespace) -> None:
     """Create an example git-watch configuration file."""
     output_path = args.output or "git-watch-config.toml"
-    create_example_config(output_path)
+    create_git_watch_example_config(output_path)
 
 
 def main() -> None:
@@ -230,9 +287,11 @@ def main() -> None:
     parser_slurm = subparsers.add_parser(
         "slurm-run", help="Run workflows on a Slurm cluster."
     )
-    parser_slurm.add_argument("workflow_file", help="Workflow file to run.")
     parser_slurm.add_argument(
-        "working_directory", help="The project's working directory."
+        "--workflow_file", help="Workflow file to run.", default=None
+    )
+    parser_slurm.add_argument(
+        "--working_directory", help="The project's working directory.", default=None
     )
     parser_slurm.add_argument(
         "--dryrun",
@@ -243,6 +302,15 @@ def main() -> None:
     parser_slurm.add_argument(
         "--template",
         help="Full path to jinja template file for SLURM job script generation.",
+    )
+    parser_slurm.add_argument(
+        "--config",
+        help="Path to git-watch config file to load custom SLURM options from.",
+    )
+    parser_slurm.add_argument(
+        "--generate-template",
+        action="store_true",
+        help="Generate a template config file for slurm-run.",
     )
     parser_slurm.set_defaults(func=slurm_run)
 
