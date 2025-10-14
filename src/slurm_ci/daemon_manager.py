@@ -84,7 +84,6 @@ class DaemonManager:
                 "branch": config.branch,
                 "polling_interval": config.polling_interval,
                 "workflow_file": config.workflow_file,
-                "config_dir": config.config_dir,
                 "working_directory": config.working_directory,
             },
         }

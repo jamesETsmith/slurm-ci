@@ -71,7 +71,6 @@ class GitRepo(Base):
     repo_url = Column(String, index=True)
     branch = Column(String, default="main")
     workflow_file = Column(String)
-    config_dir = Column(String)
     working_directory = Column(String)
     polling_interval = Column(Integer, default=300)
     is_active = Column(Boolean, default=True)

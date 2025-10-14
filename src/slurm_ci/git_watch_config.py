@@ -15,14 +15,13 @@ class GitWatchConfig:
     # Required fields (no defaults)
     daemon_name: str
     repo_url: str
-    config_dir: str
+    workflow_file: str
     working_directory: str
 
     # Optional fields (with defaults)
     polling_interval: int = 300
     branch: str = "main"
     github_token: Optional[str] = None
-    workflow_file: str = "workflows/ci.yml"
     slurm_options: Optional[Dict[str, Any]] = None
 
     @classmethod
@@ -37,6 +36,14 @@ class GitWatchConfig:
 
         config_dir = config_path.parent
         slurm_ci_config = config_data.get("slurm-ci", {})
+
+        # Resolve paths to be absolute relative to the config file
+        if "workflow_file" in slurm_ci_config:
+            workflow_file = Path(slurm_ci_config["workflow_file"])
+            if not workflow_file.is_absolute():
+                slurm_ci_config["workflow_file"] = str(
+                    (config_dir / workflow_file).resolve()
+                )
 
         if "working_directory" in slurm_ci_config:
             working_directory = Path(slurm_ci_config["working_directory"])
@@ -58,7 +65,7 @@ class GitWatchConfig:
         required_fields = {
             "daemon.name": daemon_config.get("name"),
             "repository.url": repo_config.get("url"),
-            "slurm-ci.config_dir": slurm_config.get("config_dir"),
+            "slurm-ci.workflow_file": slurm_config.get("workflow_file"),
             "slurm-ci.working_directory": slurm_config.get("working_directory"),
         }
 
@@ -76,9 +83,8 @@ class GitWatchConfig:
             repo_url=repo_config["url"],
             branch=repo_config.get("branch", "main"),
             github_token=repo_config.get("github_token"),
-            config_dir=slurm_config["config_dir"],
+            workflow_file=slurm_config["workflow_file"],
             working_directory=slurm_config["working_directory"],
-            workflow_file=slurm_config.get("workflow_file", "workflows/ci.yml"),
             slurm_options=slurm_config.get("slurm"),
         )
 
@@ -89,11 +95,6 @@ class GitWatchConfig:
 
         if not self.repo_url.startswith(("https://github.com/", "git@github.com:")):
             raise ValueError("Only GitHub repositories are currently supported")
-
-        if not Path(self.config_dir).exists():
-            raise ValueError(
-                f"Slurm config directory does not exist: {self.config_dir}"
-            )
 
     def get_repo_name(self) -> str:
         """Extract repository name from URL."""
@@ -118,9 +119,8 @@ def create_example_config(output_path: str) -> None:
             "github_token": "optional_for_private_repos",
         },
         "slurm-ci": {
-            "config_dir": "/path/to/slurm-ci-configs",
-            "working_directory": "/path/to/working-directory",
             "workflow_file": "workflows/ci.yml",
+            "working_directory": "/path/to/working-directory",
             "slurm": {
                 "gres": "gpu:gfx942",
                 "cpus-per-task": 32,

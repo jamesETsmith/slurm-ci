@@ -91,7 +91,6 @@ class GitWatcher:
                 existing_repo.repo_url = self.config.repo_url
                 existing_repo.branch = self.config.branch
                 existing_repo.workflow_file = self.config.workflow_file
-                existing_repo.config_dir = self.config.config_dir
                 existing_repo.working_directory = self.config.working_directory
                 existing_repo.polling_interval = self.config.polling_interval
                 existing_repo.is_active = True
@@ -106,7 +105,6 @@ class GitWatcher:
                     repo_url=self.config.repo_url,
                     branch=self.config.branch,
                     workflow_file=self.config.workflow_file,
-                    config_dir=self.config.config_dir,
                     working_directory=self.config.working_directory,
                     polling_interval=self.config.polling_interval,
                     is_active=True,
@@ -385,7 +383,7 @@ class GitWatcher:
         """Trigger a CI job for the given commit."""
         try:
             # Construct workflow file path from config directory (not repo)
-            workflow_file = Path(self.config.config_dir) / self.config.workflow_file
+            workflow_file = Path(self.config.workflow_file)
             if not workflow_file.exists():
                 self.logger.error(
                     f"Workflow file not found in config dir: {workflow_file}"

@@ -21,17 +21,12 @@ branch = "main"
 # github_token = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
 [slurm-ci]
-# Directory containing slurm-ci configuration files
-# This should contain any matrix configurations, environment settings, etc.
-config_dir = "/home/AMD/jamesmit/apps/slurm-ci/.github/workflows"
-
-# Path to the workflow file relative to the config directory
-# This is your custom slurm-ci workflow file (not from the repository)
-workflow_file = "ci.yml"
+workflow_file = "/home/AMD/jamesmit/apps/slurm-ci/.github/workflows/ci.yml"
+working_directory = "/home/AMD/jamesmit/apps/slurm-ci"
 
 # Custom SLURM batch options
 # These will override the default options and be passed to sbatch
 [slurm-ci.slurm]
-gres = "gpu:gfx942"
-cpus-per-task = 32
-time = "12:00:00"
+gres = "gpu:gfx90a-mi210x"
+cpus-per-task = 4
+time = "00:10:00"

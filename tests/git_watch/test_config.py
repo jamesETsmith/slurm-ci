@@ -19,9 +19,8 @@ def test_config_from_dict() -> None:
             "github_token": "test-token",
         },
         "slurm-ci": {
-            "config_dir": "/tmp/test-config",
-            "working_directory": "/tmp/work-dir",
             "workflow_file": "workflows/test.yml",
+            "working_directory": "/tmp/work-dir",
         },
     }
 
@@ -32,9 +31,8 @@ def test_config_from_dict() -> None:
     assert config.repo_url == "https://github.com/user/repo"
     assert config.branch == "develop"
     assert config.github_token == "test-token"
-    assert config.config_dir == "/tmp/test-config"
-    assert config.working_directory == "/tmp/work-dir"
     assert config.workflow_file == "workflows/test.yml"
+    assert config.working_directory == "/tmp/work-dir"
 
 
 def test_config_missing_required_fields() -> None:
@@ -42,8 +40,8 @@ def test_config_missing_required_fields() -> None:
     config_data = {
         "daemon": {"name": "test-daemon"},
         "repository": {"url": "https://github.com/user/repo"},
-        "slurm-ci": {"config_dir": "/tmp/test-config"},
-        # Missing slurm-ci.working_directory
+        "slurm-ci": {"working_directory": "/tmp/work-dir"},
+        # Missing slurm-ci.workflow_file
     }
 
     with pytest.raises(ValueError, match="Missing required configuration fields"):
@@ -56,7 +54,7 @@ def test_config_defaults() -> None:
         "daemon": {"name": "test-daemon"},
         "repository": {"url": "https://github.com/user/repo"},
         "slurm-ci": {
-            "config_dir": "/tmp/test-config",
+            "workflow_file": "workflows/ci.yml",
             "working_directory": "/tmp/work-dir",
         },
     }
@@ -65,7 +63,6 @@ def test_config_defaults() -> None:
 
     assert config.polling_interval == 300  # default
     assert config.branch == "main"  # default
-    assert config.workflow_file == "workflows/ci.yml"  # default
     assert config.github_token is None  # default
 
 
@@ -76,7 +73,7 @@ def test_config_validation() -> None:
         daemon_name="test",
         polling_interval=30,  # Too low
         repo_url="https://github.com/user/repo",
-        config_dir="/tmp/test",
+        workflow_file="/tmp/test-workflow.yml",
         working_directory="/tmp/work-dir",
     )
 
@@ -90,7 +87,7 @@ def test_config_validation() -> None:
         daemon_name="test",
         polling_interval=300,
         repo_url="https://gitlab.com/user/repo",  # Not GitHub
-        config_dir="/tmp/test",
+        workflow_file="/tmp/test-workflow.yml",
         working_directory="/tmp/work-dir",
     )
 
@@ -105,7 +102,7 @@ def test_get_repo_name() -> None:
     config = GitWatchConfig(
         daemon_name="test",
         repo_url="https://github.com/user/repo",
-        config_dir="/tmp/test",
+        workflow_file="/tmp/test-workflow.yml",
         working_directory="/tmp/work-dir",
     )
 
@@ -132,9 +129,8 @@ url = "https://github.com/user/repo"
 branch = "develop"
 
 [slurm-ci]
-config_dir = "/tmp/test-config"
-working_directory = "/tmp/work-dir"
 workflow_file = "workflows/test.yml"
+working_directory = "/tmp/work-dir"
 """
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
@@ -148,9 +144,8 @@ workflow_file = "workflows/test.yml"
             assert config.polling_interval == 600
             assert config.repo_url == "https://github.com/user/repo"
             assert config.branch == "develop"
-            assert config.config_dir == "/tmp/test-config"
-            assert config.working_directory == "/tmp/work-dir"
-            assert config.workflow_file == "workflows/test.yml"
+            assert config.workflow_file.endswith("workflows/test.yml")
+            assert config.working_directory.endswith("/tmp/work-dir")
         finally:
             os.unlink(f.name)
 

@@ -109,9 +109,8 @@ branch = "main"
 github_token = "optional_for_private_repos"
 
 [slurm-ci]
-config_dir = "/path/to/slurm-ci-configs"
-working_directory = "/path/to/working-directory"
 workflow_file = "workflows/ci.yml"
+working_directory = "/path/to/working-directory"
 
 [slurm-ci.slurm]
 gres = "gpu:gfx942"
