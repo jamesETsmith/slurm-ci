@@ -272,6 +272,8 @@ def _launch_single_job(
     if custom_sbatch_options:
         sbatch_options.update(custom_sbatch_options)
 
+    print("Writing logfile to: ", status_file.get_logfile_path())
+
     # Build the main command
     main_command = build_act_command(workflow_dir, combo, dryrun)
 

@@ -68,8 +68,8 @@ class StatusWatcher:
         runtime = status_data.get("runtime", {})
         ci = status_data.get("ci", {})
 
-        has_end_time = "end_time" in runtime
-        exit_code = runtime.get("exit_code")
+        has_end_time = "end" in runtime
+        exit_code = runtime.get("end", {}).get("exit_code")
 
         if has_end_time:
             if exit_code == 0:
@@ -82,7 +82,7 @@ class StatusWatcher:
 
         # Extract timing information
         start_time = runtime.get("start_time")
-        end_time = runtime.get("end_time")
+        end_time = runtime.get("end", {}).get("time")
 
         return {
             "name": job_name,
