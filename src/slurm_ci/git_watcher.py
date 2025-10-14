@@ -92,6 +92,7 @@ class GitWatcher:
                 existing_repo.branch = self.config.branch
                 existing_repo.workflow_file = self.config.workflow_file
                 existing_repo.config_dir = self.config.config_dir
+                existing_repo.working_directory = self.config.working_directory
                 existing_repo.polling_interval = self.config.polling_interval
                 existing_repo.is_active = True
                 existing_repo.updated_at = datetime.utcnow()
@@ -106,6 +107,7 @@ class GitWatcher:
                     branch=self.config.branch,
                     workflow_file=self.config.workflow_file,
                     config_dir=self.config.config_dir,
+                    working_directory=self.config.working_directory,
                     polling_interval=self.config.polling_interval,
                     is_active=True,
                 )
@@ -405,10 +407,9 @@ class GitWatcher:
             # Launch slurm jobs with git repository info
             # Use a placeholder working directory since the actual repo will be
             # cloned on compute nodes
-            placeholder_workdir = "/tmp/placeholder"
             launch_slurm_jobs(
                 str(workflow_file),
-                placeholder_workdir,
+                self.config.working_directory,
                 dryrun=False,
                 git_repo=git_repo,
                 git_repo_url=self.config.repo_url,

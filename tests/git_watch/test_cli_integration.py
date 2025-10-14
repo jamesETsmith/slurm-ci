@@ -4,6 +4,7 @@
 import os
 import subprocess
 import tempfile
+import sys
 
 
 def test_git_watch_create_config() -> None:
@@ -14,7 +15,7 @@ def test_git_watch_create_config() -> None:
         # Run the create-config command
         result = subprocess.run(
             [
-                "python",
+                sys.executable,
                 "-m",
                 "slurm_ci.cli",
                 "git-watch",
@@ -44,7 +45,7 @@ def test_git_watch_create_config() -> None:
 def test_git_watch_status_no_daemons() -> None:
     """Test status command when no daemons are running."""
     result = subprocess.run(
-        ["python", "-m", "slurm_ci.cli", "git-watch", "status"],
+        [sys.executable, "-m", "slurm_ci.cli", "git-watch", "status"],
         capture_output=True,
         text=True,
     )
@@ -59,7 +60,14 @@ def test_git_watch_status_no_daemons() -> None:
 def test_git_watch_stop_nonexistent_daemon() -> None:
     """Test stopping a daemon that doesn't exist."""
     result = subprocess.run(
-        ["python", "-m", "slurm_ci.cli", "git-watch", "stop", "nonexistent-daemon"],
+        [
+            sys.executable,
+            "-m",
+            "slurm_ci.cli",
+            "git-watch",
+            "stop",
+            "nonexistent-daemon",
+        ],
         capture_output=True,
         text=True,
     )
@@ -72,7 +80,7 @@ def test_git_watch_stop_nonexistent_daemon() -> None:
 def test_git_watch_stop_all_no_daemons() -> None:
     """Test stop-all command when no daemons are running."""
     result = subprocess.run(
-        ["python", "-m", "slurm_ci.cli", "git-watch", "stop-all"],
+        [sys.executable, "-m", "slurm_ci.cli", "git-watch", "stop-all"],
         capture_output=True,
         text=True,
     )

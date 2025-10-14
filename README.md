@@ -1,5 +1,8 @@
 # slurm-ci
 
+:construction: **This project is under active development and is not yet ready for production use.**
+:construction: **Not all tests are working yet.**
+
 `slurm-ci` is a tool for running GitHub Actions workflows on a Slurm cluster. It provides a bridge between the local development environment and a high-performance computing (HPC) environment, allowing you to test and run your CI pipelines with the power of Slurm.
 
 ## Overview
@@ -78,3 +81,74 @@ slurm-ci slurm-run --generate-template
 ```
 
 This will create a `slurm-run-config.toml` file in your current directory with the default options, which you can then customize to your needs.
+
+### `git-watch`
+
+The `git-watch` command allows you to monitor a Git repository for new commits and automatically trigger `slurm-run` jobs. It runs as a daemon process and can be managed with the following subcommands:
+
+**1. Create a configuration file:**
+
+Before starting a `git-watch` daemon, you need to create a configuration file.
+
+**Usage:**
+
+```bash
+slurm-ci git-watch create-config --output <path_to_config.toml>
+```
+
+**Example `git-watch-config.toml`:**
+
+```toml
+[daemon]
+name = "my-project-main"
+polling_interval = 300
+
+[repository]
+url = "https://github.com/user/repo"
+branch = "main"
+github_token = "optional_for_private_repos"
+
+[slurm-ci]
+config_dir = "/path/to/slurm-ci-configs"
+working_directory = "/path/to/working-directory"
+workflow_file = "workflows/ci.yml"
+
+[slurm-ci.slurm]
+gres = "gpu:gfx942"
+"cpus-per-task" = 32
+time = "12:00:00"
+partition = "gpu"
+```
+
+**2. Start a daemon:**
+
+**Usage:**
+
+```bash
+slurm-ci git-watch start --config <path_to_config.toml>
+```
+
+**3. Stop a daemon:**
+
+**Usage:**
+
+```bash
+slurm-ci git-watch stop <daemon_name>
+```
+
+**4. Stop all daemons:**
+
+**Usage:**
+
+```bash
+slurm-ci git-watch stop-all
+```
+
+**5. Check daemon status:**
+
+**Usage:**
+
+```bash
+slurm-ci git-watch status
+```
+

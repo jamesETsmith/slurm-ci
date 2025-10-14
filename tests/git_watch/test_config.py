@@ -20,6 +20,7 @@ def test_config_from_dict() -> None:
         },
         "slurm-ci": {
             "config_dir": "/tmp/test-config",
+            "working_directory": "/tmp/work-dir",
             "workflow_file": "workflows/test.yml",
         },
     }
@@ -32,7 +33,8 @@ def test_config_from_dict() -> None:
     assert config.branch == "develop"
     assert config.github_token == "test-token"
     assert config.config_dir == "/tmp/test-config"
-    assert config.workflow_file == ".github/workflows/test.yml"
+    assert config.working_directory == "/tmp/work-dir"
+    assert config.workflow_file == "workflows/test.yml"
 
 
 def test_config_missing_required_fields() -> None:
@@ -40,7 +42,8 @@ def test_config_missing_required_fields() -> None:
     config_data = {
         "daemon": {"name": "test-daemon"},
         "repository": {"url": "https://github.com/user/repo"},
-        # Missing slurm-ci.config_dir
+        "slurm-ci": {"config_dir": "/tmp/test-config"},
+        # Missing slurm-ci.working_directory
     }
 
     with pytest.raises(ValueError, match="Missing required configuration fields"):
@@ -52,7 +55,10 @@ def test_config_defaults() -> None:
     config_data = {
         "daemon": {"name": "test-daemon"},
         "repository": {"url": "https://github.com/user/repo"},
-        "slurm-ci": {"config_dir": "/tmp/test-config"},
+        "slurm-ci": {
+            "config_dir": "/tmp/test-config",
+            "working_directory": "/tmp/work-dir",
+        },
     }
 
     config = GitWatchConfig.from_dict(config_data)
@@ -71,6 +77,7 @@ def test_config_validation() -> None:
         polling_interval=30,  # Too low
         repo_url="https://github.com/user/repo",
         config_dir="/tmp/test",
+        working_directory="/tmp/work-dir",
     )
 
     with pytest.raises(
@@ -84,6 +91,7 @@ def test_config_validation() -> None:
         polling_interval=300,
         repo_url="https://gitlab.com/user/repo",  # Not GitHub
         config_dir="/tmp/test",
+        working_directory="/tmp/work-dir",
     )
 
     with pytest.raises(
@@ -98,6 +106,7 @@ def test_get_repo_name() -> None:
         daemon_name="test",
         repo_url="https://github.com/user/repo",
         config_dir="/tmp/test",
+        working_directory="/tmp/work-dir",
     )
 
     assert config.get_repo_name() == "user/repo"
@@ -124,6 +133,7 @@ branch = "develop"
 
 [slurm-ci]
 config_dir = "/tmp/test-config"
+working_directory = "/tmp/work-dir"
 workflow_file = "workflows/test.yml"
 """
 
@@ -139,6 +149,7 @@ workflow_file = "workflows/test.yml"
             assert config.repo_url == "https://github.com/user/repo"
             assert config.branch == "develop"
             assert config.config_dir == "/tmp/test-config"
+            assert config.working_directory == "/tmp/work-dir"
             assert config.workflow_file == "workflows/test.yml"
         finally:
             os.unlink(f.name)
