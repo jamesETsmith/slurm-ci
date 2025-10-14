@@ -318,9 +318,11 @@ class GitWatcher:
                             all_complete = False
                             break
 
-                        exit_code = runtime.get("exit_code")
+                        # Get exit_code from runtime.end.exit_code
+                        runtime_end = runtime.get("end", {})
+                        exit_code = runtime_end.get("exit_code")
                         if exit_code is None:
-                            # Corrupted status file
+                            # Corrupted status file - no exit_code in runtime.end
                             any_exception = True
                         elif exit_code != 0:
                             any_failed = True
