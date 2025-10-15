@@ -18,6 +18,7 @@ class SlurmRunConfig:
 
     # Optional fields
     slurm_options: Optional[Dict[str, Any]] = None
+    matrix_map: Optional[Dict[str, Dict[str, str]]] = None
 
     @classmethod
     def from_file(cls, config_path: str) -> "SlurmRunConfig":
@@ -68,11 +69,51 @@ class SlurmRunConfig:
                 f"Missing required configuration fields: {', '.join(missing_fields)}"
             )
 
+        # Extract slurm options but exclude matrix_map from them
+        slurm_config = slurm_ci_config.get("slurm", {})
+        slurm_options = {k: v for k, v in slurm_config.items() if k != "matrix_map"}
+        matrix_map = slurm_config.get("matrix_map")
+
         return cls(
             workflow_file=slurm_ci_config["workflow_file"],
             working_directory=slurm_ci_config["working_directory"],
-            slurm_options=slurm_ci_config.get("slurm"),
+            slurm_options=slurm_options if slurm_options else None,
+            matrix_map=matrix_map,
         )
+
+
+def apply_matrix_mappings(
+    sbatch_options: Dict[str, Any],
+    matrix_combo: Dict[str, Any],
+    matrix_map: Optional[Dict[str, Dict[str, str]]] = None,
+) -> Dict[str, Any]:
+    """Apply matrix mappings to SLURM options.
+
+    Args:
+        sbatch_options: Base SLURM options
+        matrix_combo: Current matrix combination values
+        matrix_map: Matrix mapping configuration
+
+    Returns:
+        Updated SLURM options with matrix mappings applied
+    """
+    if not matrix_map:
+        return sbatch_options
+
+    updated_options = sbatch_options.copy()
+
+    for matrix_var, mapping_config in matrix_map.items():
+        if matrix_var in matrix_combo:
+            matrix_value = matrix_combo[matrix_var]
+            slurm_key = mapping_config.get("key")
+            value_prefix = mapping_config.get("value_prefix", "")
+            value_suffix = mapping_config.get("value_suffix", "")
+
+            if slurm_key:
+                mapped_value = f"{value_prefix}{matrix_value}{value_suffix}"
+                updated_options[slurm_key] = mapped_value
+
+    return updated_options
 
 
 def create_example_config(output_path: str) -> None:
@@ -85,6 +126,13 @@ def create_example_config(output_path: str) -> None:
                 "gres": "gpu:gfx942",
                 "cpus-per-task": 32,
                 "time": "12:00:00",
+                "matrix_map": {
+                    "gpu_arch": {
+                        "key": "gres",
+                        "value_prefix": "gpu:",
+                        "value_suffix": "",
+                    }
+                },
             },
         }
     }

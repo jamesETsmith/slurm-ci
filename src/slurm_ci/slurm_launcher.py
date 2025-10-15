@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 from jinja2 import Environment, FileSystemLoader, Template
 
 import slurm_ci
+from slurm_ci.slurm_run_config import apply_matrix_mappings
 from slurm_ci.status_file import StatusFile
 from slurm_ci.workflow_parser import WorkflowParser
 
@@ -147,7 +148,7 @@ class SlurmTemplateRenderer:
         status_file: Optional[str] = None,
         cleanup_temp_dir: bool = True,
         git_repo: Optional[Dict[str, str]] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> str:
         """Render a SLURM job script from template.
 
@@ -161,7 +162,8 @@ class SlurmTemplateRenderer:
             post_commands: Commands to run after main command
             status_file: Path to status file for job tracking
             cleanup_temp_dir: Whether to clean up temp directories
-            git_repo: Git repository info (url, branch, commit_sha) for cloning on compute node
+            git_repo: Git repository info (url, branch, commit_sha)
+                for cloning on compute node
             **kwargs: Additional template variables
 
         Returns:
@@ -241,6 +243,7 @@ def _launch_single_job(
     template_dir: Optional[Path] = None,
     template_path: Optional[Path] = None,
     custom_sbatch_options: Optional[Dict[str, Any]] = None,
+    matrix_map: Optional[Dict[str, Dict[str, str]]] = None,
     git_repo: Optional[Dict[str, str]] = None,
 ) -> None:
     """Helper function to launch a single slurm job.
@@ -252,6 +255,7 @@ def _launch_single_job(
         template_dir: Directory containing custom templates
         template_path: Path to a specific template file
         custom_sbatch_options: Additional SBATCH options to override defaults
+        matrix_map: Matrix mapping configuration for dynamic SLURM options
         git_repo: Git repository info (url, branch, commit_sha) for cloning on compute node
     """
     combo = status_file.data["matrix"]
@@ -271,6 +275,8 @@ def _launch_single_job(
     )
     if custom_sbatch_options:
         sbatch_options.update(custom_sbatch_options)
+    # Apply matrix mappings to SLURM options
+    sbatch_options = apply_matrix_mappings(sbatch_options, combo, matrix_map)
 
     print("Writing logfile to: ", status_file.get_logfile_path())
 
@@ -307,6 +313,7 @@ def relaunch_slurm_job(
     template_name: str = "default",
     template_dir: Optional[Path] = None,
     template_path: Optional[Path] = None,
+    matrix_map: Optional[Dict[str, Dict[str, str]]] = None,
     git_repo: Optional[Dict[str, str]] = None,
 ) -> None:
     """Relaunches a slurm job from a status file.
@@ -317,6 +324,7 @@ def relaunch_slurm_job(
         template_name: Name of template to use
         template_dir: Directory containing custom templates
         template_path: Path to a specific template file
+        matrix_map: Matrix mapping configuration for dynamic SLURM options
         git_repo: Git repository info (url, branch, commit_sha) for cloning on compute node
     """
     # remove old runtime info
@@ -327,7 +335,14 @@ def relaunch_slurm_job(
 
     status_file.write()
     _launch_single_job(
-        status_file, dryrun, template_name, template_dir, template_path, None, git_repo
+        status_file,
+        dryrun,
+        template_name,
+        template_dir,
+        template_path,
+        None,
+        matrix_map,
+        git_repo,
     )
 
 
@@ -339,6 +354,7 @@ def launch_slurm_jobs(
     template_dir: Optional[Path] = None,
     template_path: Optional[Path] = None,
     custom_sbatch_options: Optional[Dict[str, Any]] = None,
+    matrix_map: Optional[Dict[str, Dict[str, str]]] = None,
     git_repo: Optional[Dict[str, str]] = None,
     git_repo_url: Optional[str] = None,
     git_repo_branch: Optional[str] = None,
@@ -353,6 +369,7 @@ def launch_slurm_jobs(
         template_dir: Directory containing custom templates
         template_path: Path to a specific template file
         custom_sbatch_options: Additional SBATCH options to override defaults
+        matrix_map: Matrix mapping configuration for dynamic SLURM options
         git_repo: Git repository info (url, branch, commit_sha) for cloning on compute node
         git_repo_url: Git repository URL for status file (git-watch only)
         git_repo_branch: Git repository branch for status file (git-watch only)
@@ -381,5 +398,6 @@ def launch_slurm_jobs(
             template_dir,
             template_path,
             custom_sbatch_options,
+            matrix_map,
             git_repo,
         )

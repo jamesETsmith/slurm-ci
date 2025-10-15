@@ -99,6 +99,7 @@ def slurm_run(args: argparse.Namespace) -> None:
 
     # Handle custom slurm options from config file
     custom_sbatch_options = None
+    matrix_map = None
     workflow_file = args.workflow_file
     working_directory = args.working_directory
 
@@ -112,12 +113,15 @@ def slurm_run(args: argparse.Namespace) -> None:
         try:
             config = SlurmRunConfig.from_file(args.config)
             custom_sbatch_options = config.slurm_options
+            matrix_map = config.matrix_map
             workflow_file = config.workflow_file
             working_directory = config.working_directory
             if custom_sbatch_options:
                 print(
                     f"Using custom SLURM options from config: {custom_sbatch_options}"
                 )
+            if matrix_map:
+                print(f"Using matrix mappings from config: {matrix_map}")
         except Exception as e:
             print(f"Warning: Could not load config file {args.config}: {e}")
     elif not (args.workflow_file and args.working_directory):
@@ -132,6 +136,7 @@ def slurm_run(args: argparse.Namespace) -> None:
         dryrun=args.dryrun,
         template_path=template_path,
         custom_sbatch_options=custom_sbatch_options,
+        matrix_map=matrix_map,
     )
 
 
