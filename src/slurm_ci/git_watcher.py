@@ -13,7 +13,7 @@ import requests
 import toml
 
 from .daemon_manager import DaemonManager
-from .database import CommitTracker, CommitStatus, GitRepo, SessionLocal, init_db
+from .database import CommitStatus, CommitTracker, GitRepo, SessionLocal, init_db
 from .git_watch_config import GitWatchConfig
 from .slurm_launcher import launch_slurm_jobs
 

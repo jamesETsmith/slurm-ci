@@ -5,6 +5,21 @@
 
 `slurm-ci` is a tool for running GitHub Actions workflows on a Slurm cluster. It provides a bridge between the local development environment and a high-performance computing (HPC) environment, allowing you to test and run your CI pipelines with the power of Slurm.
 
+## Installation
+
+### From Github
+```bash
+pip install https://github.com/jamesETsmith/slurm-ci.git
+```
+
+### Dev setup (from source)
+```bash
+git clone https://github.com/jamesETsmith/slurm-ci.git
+cd slurm-ci
+pip install -e ".[dev]"
+pre-commit install
+```
+
 ## Overview
 ![slurm-ci_services](slurm-ci_services.svg)
 

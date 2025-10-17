@@ -1,0 +1,23 @@
+repos:
+- repo: https://github.com/Yelp/detect-secrets
+  rev: v1.4.0
+  hooks:
+    - id: detect-secrets
+
+- repo: https://github.com/gitleaks/gitleaks
+  rev: v8.18.0
+  hooks:
+    - id: gitleaks
+      args: ['--source', '.']
+
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.14.1  # specify your desired Ruff version
+  hooks:
+    # Run Ruff linter (code checks)
+    - id: ruff-check
+      args: [--fix]        # autofix issues detected by lint
+      types_or: [python, pyi]
+
+    # Run Ruff formatter (code styling)
+    - id: ruff-format
+      types_or: [python, pyi]

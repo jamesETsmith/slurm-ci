@@ -150,7 +150,7 @@ class SlurmTemplateRenderer:
         status_file: Optional[str] = None,
         cleanup_temp_dir: bool = True,
         git_repo: Optional[Dict[str, str]] = None,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> str:
         """Render a SLURM job script from template.
 
@@ -258,7 +258,8 @@ def _launch_single_job(
         template_path: Path to a specific template file
         custom_sbatch_options: Additional SBATCH options to override defaults
         matrix_map: Matrix mapping configuration for dynamic SLURM options
-        git_repo: Git repository info (url, branch, commit_sha) for cloning on compute node
+        git_repo: Git repository info (url, branch, commit_sha) for cloning
+            on compute node
     """
     combo = status_file.data["matrix"]
     working_directory = status_file.data["project"]["working_directory"]
@@ -327,7 +328,8 @@ def relaunch_slurm_job(
         template_dir: Directory containing custom templates
         template_path: Path to a specific template file
         matrix_map: Matrix mapping configuration for dynamic SLURM options
-        git_repo: Git repository info (url, branch, commit_sha) for cloning on compute node
+        git_repo: Git repository info (url, branch, commit_sha) for cloning
+            on compute node
     """
     # Create a new status file for the relaunch to get new log/status file paths
     new_status_file = StatusFile(
@@ -398,7 +400,8 @@ def launch_slurm_jobs(
         template_path: Path to a specific template file
         custom_sbatch_options: Additional SBATCH options to override defaults
         matrix_map: Matrix mapping configuration for dynamic SLURM options
-        git_repo: Git repository info (url, branch, commit_sha) for cloning on compute node
+        git_repo: Git repository info (url, branch, commit_sha) for cloning
+            on compute node
         git_repo_url: Git repository URL for status file (git-watch only)
         git_repo_branch: Git repository branch for status file (git-watch only)
     """

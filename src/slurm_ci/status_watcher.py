@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import toml
+from sqlalchemy.orm import Session
 
 from .config import STATUS_DIR
 from .database import Build, Job, SessionLocal
@@ -101,7 +102,7 @@ class StatusWatcher:
             "file_path": str(file_path),
         }
 
-    def get_or_create_build(self, session, build_info: Dict) -> Build:
+    def get_or_create_build(self, session: Session, build_info: Dict) -> Build:
         """Get existing build or create new one."""
         build = (
             session.query(Build)
@@ -210,7 +211,7 @@ class StatusWatcher:
         finally:
             session.close()
 
-    def update_build_status(self, session, build: Build) -> None:
+    def update_build_status(self, session: Session, build: Build) -> None:
         """Update build status based on its jobs."""
         jobs = session.query(Job).filter(Job.build_id == build.id).all()
 

@@ -14,6 +14,8 @@ from sqlalchemy import (
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 
+from . import config
+
 
 class CommitStatus(Enum):
     """Enum for commit processing status."""
@@ -23,9 +25,6 @@ class CommitStatus(Enum):
     COMPLETED = "completed"  # Job completed successfully, do not launch
     FAILED = "failed"  # Job completed with failure, do not launch
     EXCEPTION = "exception"  # Job had exception/corruption, should relaunch
-
-
-from . import config
 
 
 engine = create_engine(config.DATABASE_URL)

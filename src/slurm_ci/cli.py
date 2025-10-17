@@ -11,13 +11,15 @@ from slurm_ci.config import ACT_BINARY, ACT_PATH
 from slurm_ci.daemon_manager import DaemonManager
 from slurm_ci.dashboard import app
 from slurm_ci.database import init_db
-from slurm_ci.git_watcher import start_git_watcher
 from slurm_ci.git_watch_config import (
     create_example_config as create_git_watch_example_config,
 )
+from slurm_ci.git_watcher import start_git_watcher
 from slurm_ci.slurm_launcher import launch_slurm_jobs, relaunch_slurm_job
 from slurm_ci.slurm_run_config import (
     SlurmRunConfig,
+)
+from slurm_ci.slurm_run_config import (
     create_example_config as create_slurm_run_example_config,
 )
 from slurm_ci.status_file import StatusFile

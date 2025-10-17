@@ -48,7 +48,7 @@ def index() -> str:
 
 
 @app.route("/logs")
-def all_logs():
+def all_logs() -> str:
     """Display all logs from all jobs."""
     db = SessionLocal()
     # a given job might not have started yet

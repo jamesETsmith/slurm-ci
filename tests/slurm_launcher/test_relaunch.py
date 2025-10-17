@@ -1,5 +1,7 @@
 import os
 import time
+from pathlib import Path
+from typing import Union
 
 import pytest
 
@@ -13,7 +15,7 @@ workflow_file = f"{project_dir}/.slurm-ci/workflows/ci.yml"
 
 
 @pytest.fixture
-def status_file(tmpdir):
+def status_file(tmpdir: Union[str, Path]) -> StatusFile:
     """Create a status file in a temporary directory."""
     sf = StatusFile(
         workflow_file=workflow_file,
@@ -25,7 +27,7 @@ def status_file(tmpdir):
     return sf
 
 
-def test_relaunch(status_file) -> None:
+def test_relaunch(status_file: StatusFile) -> None:
     """Test relaunching a job from a status file."""
     # Relaunch the job
     relaunch_slurm_job(status_file, dryrun=False)

@@ -4,7 +4,7 @@ import os
 import subprocess
 import time
 from collections import OrderedDict
-from typing import Optional
+from typing import Dict, Optional
 
 import toml
 
@@ -73,10 +73,10 @@ class StatusFile:
 
         # Add logfile path now that we have the hashed filename
         self.data["ci"]["logfile_path"] = self.get_logfile_path()
-        self.logger.info(f"Status file initialized successfully")
+        self.logger.info("Status file initialized successfully")
 
     @staticmethod
-    def from_file(status_file: str):
+    def from_file(status_file: str) -> "StatusFile":
         """Create a StatusFile object from a file."""
         logger = logging.getLogger(__name__)
         logger.info(f"Loading StatusFile from: {status_file}")
@@ -85,7 +85,7 @@ class StatusFile:
             with open(status_file, "r") as f:
                 data = toml.load(f)
 
-            logger.debug(f"Successfully loaded status file data")
+            logger.debug("Successfully loaded status file data")
             logger.debug(f"Project: {data.get('project', {}).get('name', 'unknown')}")
             logger.debug(
                 f"Git commit: {data.get('git', {}).get('commit', 'unknown')[:8]}..."
@@ -99,13 +99,13 @@ class StatusFile:
             sf.data = data
             sf.status_file = status_file
 
-            logger.info(f"StatusFile object created from file successfully")
+            logger.info("StatusFile object created from file successfully")
             return sf
         except Exception as e:
             logger.error(f"Failed to load StatusFile from {status_file}: {e}")
             raise
 
-    def read(self):
+    def read(self) -> Dict:
         with open(self.status_file, "r") as f:
             return toml.load(f)
 
@@ -126,7 +126,7 @@ class StatusFile:
             self.logger.error(f"Failed to write status file {self.status_file}: {e}")
             raise
 
-    def get_git_hash(self):
+    def get_git_hash(self) -> str:
         if self.git_repo_url:
             self.logger.debug(
                 f"Getting git hash from remote repository: {self.git_repo_url}"
@@ -159,7 +159,7 @@ class StatusFile:
                 self.logger.error(f"Failed to get local git hash: {e}")
                 raise
 
-    def get_project_name(self):
+    def get_project_name(self) -> str:
         if self.git_repo_url:
             self.logger.debug(f"Extracting project name from URL: {self.git_repo_url}")
             project_name = self.git_repo_url.split("/")[-1].replace(".git", "")
@@ -179,7 +179,7 @@ class StatusFile:
                 self.logger.error(f"Failed to get local project name: {e}")
                 raise
 
-    def get_git_branch(self):
+    def get_git_branch(self) -> str:
         self.logger.debug("Getting git branch from local repository")
         try:
             result = (
@@ -193,7 +193,7 @@ class StatusFile:
             self.logger.error(f"Failed to get git branch: {e}")
             raise
 
-    def get_logfile_path(self):
+    def get_logfile_path(self) -> str:
         logfile_path = os.path.join(STATUS_DIR, f"{self.hashed_filename}.log")
         self.logger.debug(f"Generated logfile path: {logfile_path}")
         return logfile_path

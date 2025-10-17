@@ -3,8 +3,8 @@
 
 import os
 import subprocess
-import tempfile
 import sys
+import tempfile
 
 
 def test_git_watch_create_config() -> None:

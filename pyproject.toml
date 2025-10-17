@@ -29,6 +29,9 @@ dependencies = [
     "ruff",
 ]
 
+[project.optional-dependencies]
+dev = ["pre-commit"]
+
 [project.urls]
 "Homepage" = "https://github.com/jamesETsmith/slurm-ci"
 "Bug Tracker" = "https://github.com/jamesETsmith/slurm-ci/issues"

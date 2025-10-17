@@ -6,6 +6,7 @@ import os
 import signal
 from datetime import datetime
 from pathlib import Path
+from types import FrameType
 from typing import Dict, List, Optional
 
 import psutil
@@ -149,7 +150,8 @@ class DaemonManager:
                 print(f"Daemon {daemon_name} stopped gracefully")
             except psutil.TimeoutExpired:
                 print(
-                    f"Daemon {daemon_name} did not stop gracefully, forcing termination..."
+                    f"Daemon {daemon_name} did not stop gracefully, "
+                    "forcing termination..."
                 )
                 process.send_signal(signal.SIGKILL)
                 process.wait(timeout=5)
@@ -209,7 +211,7 @@ class DaemonManager:
     def setup_signal_handlers(self, daemon_name: str) -> None:
         """Set up signal handlers for graceful shutdown."""
 
-        def signal_handler(signum, frame) -> None:
+        def signal_handler(signum: int, frame: Optional[FrameType]) -> None:
             print(f"\nReceived signal {signum}, shutting down daemon {daemon_name}...")
             self.cleanup_daemon_files(daemon_name)
             exit(0)
