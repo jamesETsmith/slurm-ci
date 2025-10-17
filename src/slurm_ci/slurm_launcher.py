@@ -225,7 +225,7 @@ def build_act_command(
         Complete act command string
     """
     act_args = f"--workflows {workflow_dir} "
-    act_args += " --rm "  # remove the container after the job is done
+    act_args += " --rm "  # remove the container if the job fails
 
     for var, value in combo.items():
         act_args += f"--matrix {var}:{value} "
