@@ -47,6 +47,16 @@ def index() -> str:
     return render_template("index.html", builds=builds)
 
 
+@app.route("/logs")
+def all_logs():
+    """Display all logs from all jobs."""
+    db = SessionLocal()
+    # a given job might not have started yet
+    jobs = db.query(Job).order_by(Job.start_time.desc().nulls_last()).all()
+    db.close()
+    return render_template("logs.html", jobs=jobs)
+
+
 @app.route("/build/<int:build_id>")
 def build_detail(build_id: int) -> str:
     db = SessionLocal()

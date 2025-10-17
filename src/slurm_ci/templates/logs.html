@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>All Job Logs</h2>
+<table class="centered-table">
+    <thead>
+        <tr>
+            <th>Job ID</th>
+            <th>Job Name</th>
+            <th>Build ID</th>
+            <th>Status</th>
+            <th>Started At</th>
+            <th>Finished At</th>
+            <th>Log</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for job in jobs %}
+        <tr>
+            <td>{{ job.id }}</td>
+            <td>{{ job.name }}</td>
+            <td><a href="{{ url_for('build_detail', build_id=job.build_id) }}">{{ job.build_id }}</a></td>
+            <td><span class="status-{{ job.status }}">{{ job.status }}</span></td>
+            <td>{{ job.start_time.strftime('%Y-%m-%d %H:%M:%S') if job.start_time else 'Not started' }}</td>
+            <td>{{ job.end_time.strftime('%Y-%m-%d %H:%M:%S') if job.end_time else '-' }}</td>
+            <td>
+                {% if job.log_file_path %}
+                <a href="{{ url_for('job_log', job_id=job.id) }}" target="_blank">View Log</a>
+                {% else %}
+                No log
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7">No jobs found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
