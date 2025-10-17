@@ -1,11 +1,13 @@
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from jinja2 import Environment, FileSystemLoader, Template
 
 import slurm_ci
+from slurm_ci.config import STATUS_DIR
 from slurm_ci.slurm_run_config import apply_matrix_mappings
 from slurm_ci.status_file import StatusFile
 from slurm_ci.workflow_parser import WorkflowParser
@@ -327,15 +329,41 @@ def relaunch_slurm_job(
         matrix_map: Matrix mapping configuration for dynamic SLURM options
         git_repo: Git repository info (url, branch, commit_sha) for cloning on compute node
     """
-    # remove old runtime info
-    if "end" in status_file.data["runtime"]:
-        del status_file.data["runtime"]["end"]
-    if "slurm_job_id" in status_file.data["runtime"]:
-        del status_file.data["runtime"]["slurm_job_id"]
+    # Create a new status file for the relaunch to get new log/status file paths
+    new_status_file = StatusFile(
+        workflow_file=status_file.data["project"]["workflow_file"],
+        working_directory=status_file.data["project"]["working_directory"],
+        matrix_args=status_file.data["matrix"],
+        git_repo_url=status_file.git_repo_url,
+        git_repo_branch=status_file.git_repo_branch,
+    )
+    # Copy over relevant data from the old status file but preserve new paths
+    new_status_file.data["git"] = status_file.data["git"].copy()
+    new_status_file.data["project"] = status_file.data["project"].copy()
 
-    status_file.write()
+    # Add a relaunch marker to make the hash unique
+    new_status_file.data["relaunch"] = {
+        "original_status_file": status_file.status_file,
+        "relaunch_time": time.time(),
+    }
+
+    # Regenerate the hash with the new relaunch data
+    import hashlib
+
+    new_status_file.hashed_filename = hashlib.sha256(
+        f"{new_status_file.data}".encode()
+    ).hexdigest()
+    new_status_file.status_file = os.path.join(
+        STATUS_DIR, f"{new_status_file.hashed_filename}.toml"
+    )
+
+    # Update the logfile path in the data
+    new_status_file.data["ci"]["logfile_path"] = new_status_file.get_logfile_path()
+
+    print(f"Relaunching job with new status file: {new_status_file.status_file}")
+    print(f"New log file path: {new_status_file.get_logfile_path()}")
     _launch_single_job(
-        status_file,
+        new_status_file,
         dryrun,
         template_name,
         template_dir,

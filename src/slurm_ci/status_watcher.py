@@ -1,4 +1,5 @@
 import json
+import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -150,15 +151,34 @@ class StatusWatcher:
             )
 
             if existing_job:
-                # Update existing job
-                existing_job.status = job_info["status"]
-                existing_job.exit_code = job_info["exit_code"]
-                existing_job.matrix_args = job_info["matrix_args"]
-                existing_job.log_file_path = job_info["log_file_path"]
-                existing_job.status_file_path = job_info["status_file_path"]
-                existing_job.start_time = job_info["start_time"]
-                existing_job.end_time = job_info["end_time"]
-                print(f"Updated job: {job_info['name']} -> {job_info['status']}")
+                # Check if current status file is newer than existing one
+                should_update = True
+                if existing_job.status_file_path and os.path.exists(
+                    existing_job.status_file_path
+                ):
+                    existing_mtime = os.path.getmtime(existing_job.status_file_path)
+                    current_mtime = os.path.getmtime(file_path)
+
+                    if current_mtime <= existing_mtime:
+                        should_update = False
+                        print(
+                            f"Skipping update for job {job_info['name']} - "
+                            f"current status file is not newer than existing"
+                        )
+
+                if should_update:
+                    # Update existing job with newer information
+                    existing_job.status = job_info["status"]
+                    existing_job.exit_code = job_info["exit_code"]
+                    existing_job.matrix_args = job_info["matrix_args"]
+                    existing_job.log_file_path = job_info["log_file_path"]
+                    existing_job.status_file_path = job_info["status_file_path"]
+                    existing_job.start_time = job_info["start_time"]
+                    existing_job.end_time = job_info["end_time"]
+                    print(
+                        f"Updated job: {job_info['name']} -> "
+                        f"{job_info['status']} (newer status file)"
+                    )
             else:
                 # Create new job
                 job = Job(
