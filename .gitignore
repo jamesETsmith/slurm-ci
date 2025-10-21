@@ -24,3 +24,4 @@ __pycache__
 .nfs*
 build
 slurm*.out
+*.db
