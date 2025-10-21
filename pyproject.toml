@@ -30,7 +30,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pre-commit"]
+dev = ["pre-commit", "pytest-cov"]
 
 [project.urls]
 "Homepage" = "https://github.com/jamesETsmith/slurm-ci"
