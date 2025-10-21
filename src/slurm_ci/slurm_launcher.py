@@ -214,19 +214,19 @@ def get_default_sbatch_options(
 
 
 def build_act_command(
-    workflow_dir: str, combo: Dict[str, Any], dryrun: bool = False
+    workflow_file: str, combo: Dict[str, Any], dryrun: bool = False
 ) -> str:
     """Build the act command with proper arguments.
 
     Args:
-        workflow_dir: Directory containing workflow files
+        workflow_file: Path to the specific workflow file to run
         combo: Matrix combination for the job
         dryrun: Whether this is a dry run
 
     Returns:
         Complete act command string
     """
-    act_args = f"--workflows {workflow_dir} "
+    act_args = f"--workflows {workflow_file} "
     act_args += " --rm "  # remove the container if the job fails
 
     for var, value in combo.items():
@@ -264,7 +264,6 @@ def _launch_single_job(
     combo = status_file.data["matrix"]
     working_directory = status_file.data["project"]["working_directory"]
     workflow_file = status_file.data["project"]["workflow_file"]
-    workflow_dir = os.path.dirname(workflow_file)
 
     task_name = "_".join([str(value) for value in combo.values()])
     print(str(combo))
@@ -284,7 +283,7 @@ def _launch_single_job(
     print("Writing logfile to: ", status_file.get_logfile_path())
 
     # Build the main command
-    main_command = build_act_command(workflow_dir, combo, dryrun)
+    main_command = build_act_command(workflow_file, combo, dryrun)
 
     # Render the SLURM script
     slurm_script = renderer.render_script(
