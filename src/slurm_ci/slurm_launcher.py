@@ -297,7 +297,8 @@ def _launch_single_job(
     )
 
     # Add slurm script to status file
-    status_file.data["slurm"] = {}
+    if "slurm" not in status_file.data:
+        status_file.data["slurm"] = {}
     status_file.data["slurm"]["slurm_script"] = slurm_script
     status_file.write()
 
@@ -306,7 +307,24 @@ def _launch_single_job(
     with open(slurm_script_path, "w") as f:
         f.write(slurm_script)
 
-    subprocess.run(["sbatch", slurm_script_path])
+    # Submit the job and capture the job ID
+    result = subprocess.run(
+        ["sbatch", slurm_script_path], capture_output=True, text=True
+    )
+
+    # Parse job ID from sbatch output (format: "Submitted batch job 12345")
+    if result.returncode == 0 and result.stdout:
+        job_id_str = result.stdout.strip().split()[-1]
+        try:
+            job_id = int(job_id_str)
+            status_file.set_slurm_job_id(job_id)
+            print(f"Submitted job {job_id}")
+        except ValueError:
+            print(
+                f"Warning: Could not parse job ID from sbatch output: {result.stdout}"
+            )
+    else:
+        print(f"Error submitting job: {result.stderr}")
 
 
 def relaunch_slurm_job(

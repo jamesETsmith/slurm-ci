@@ -56,6 +56,14 @@ class StatusFile:
                     # "logfile_path": self.get_logfile_path(),
                     "slurm-ci_version": slurm_ci_version,
                 },
+                # Slurm info
+                "slurm": {
+                    # Will be set to slurm job ID or -1 for local runs
+                    "job_id": None,
+                    # Job state from sacct (e.g., RUNNING, COMPLETED)
+                    "state": None,
+                    "sacct_exit_code": None,  # Exit code from sacct
+                },
                 # Matrix configuration (top-level to control section ordering)
                 "matrix": matrix_args,
                 # Runtime info - MUST BE LAST for bash appends to work
@@ -197,3 +205,13 @@ class StatusFile:
         logfile_path = os.path.join(STATUS_DIR, f"{self.hashed_filename}.log")
         self.logger.debug(f"Generated logfile path: {logfile_path}")
         return logfile_path
+
+    def set_slurm_job_id(self, job_id: int) -> None:
+        """Set the slurm job ID in the status file.
+
+        Args:
+            job_id: The slurm job ID (use -1 for local runs)
+        """
+        self.logger.info(f"Setting slurm job ID to: {job_id}")
+        self.data["slurm"]["job_id"] = job_id
+        self.write()

@@ -1,5 +1,4 @@
 import json
-import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -10,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from .config import STATUS_DIR
 from .database import Build, Job, SessionLocal
+from .slurm_utils import get_job_info_from_sacct
 
 
 class StatusWatcher:
@@ -66,6 +66,15 @@ class StatusWatcher:
             "_".join([f"{k}:{v}" for k, v in matrix_args.items()]) or file_path.stem
         )
 
+        # Get slurm info
+        slurm_info = status_data.get("slurm", {})
+        job_id = slurm_info.get("job_id")
+
+        # Query sacct for job state and exit code if job_id is available
+        sacct_info = None
+        if job_id is not None and job_id > 0:
+            sacct_info = get_job_info_from_sacct(job_id)
+
         # Determine job status and exit code
         runtime = status_data.get("runtime", {})
         ci = status_data.get("ci", {})
@@ -73,14 +82,66 @@ class StatusWatcher:
         has_end_time = "end" in runtime
         exit_code = runtime.get("end", {}).get("exit_code")
 
-        if has_end_time:
-            if exit_code == 0:
-                status = "completed"
+        # Update status file with sacct data if available
+        if sacct_info:
+            slurm_state = sacct_info.get("state")
+            sacct_exit_code = sacct_info.get("exit_code")
+
+            # Update the status file with sacct data
+            if slurm_state:
+                slurm_info["state"] = slurm_state
+            if sacct_exit_code is not None:
+                slurm_info["sacct_exit_code"] = sacct_exit_code
+
+            # Write back to file if we got new data
+            try:
+                with open(file_path, "w") as f:
+                    toml.dump(status_data, f)
+            except Exception as e:
+                print(f"Warning: Could not update status file with sacct data: {e}")
+
+            # Use sacct data to determine status if available
+            if slurm_state:
+                # Map SLURM states to our status
+                if slurm_state in ["COMPLETED"]:
+                    status = "completed"
+                    if sacct_exit_code is not None:
+                        exit_code = sacct_exit_code
+                elif slurm_state in ["FAILED", "TIMEOUT", "OUT_OF_MEMORY", "CANCELLED"]:
+                    status = "failed"
+                    if sacct_exit_code is not None:
+                        exit_code = sacct_exit_code
+                elif slurm_state in ["RUNNING"]:
+                    status = "running"
+                elif slurm_state in ["PENDING", "CONFIGURING"]:
+                    status = "pending"
+                else:
+                    # Unknown state, fall back to runtime info
+                    if has_end_time:
+                        if exit_code == 0:
+                            status = "completed"
+                        else:
+                            status = "failed"
+                    else:
+                        status = "running" if "start_time" in runtime else "pending"
             else:
-                status = "failed"
+                # No sacct data, use runtime info
+                if has_end_time:
+                    if exit_code == 0:
+                        status = "completed"
+                    else:
+                        status = "failed"
+                else:
+                    status = "running" if "start_time" in runtime else "pending"
         else:
-            # Job is still running or pending
-            status = "running" if "start_time" in runtime else "pending"
+            # No sacct data, use runtime info
+            if has_end_time:
+                if exit_code == 0:
+                    status = "completed"
+                else:
+                    status = "failed"
+            else:
+                status = "running" if "start_time" in runtime else "pending"
 
         # Extract timing information
         start_time = runtime.get("start_time")
@@ -152,20 +213,18 @@ class StatusWatcher:
             )
 
             if existing_job:
-                # Check if current status file is newer than existing one
-                should_update = True
-                if existing_job.status_file_path and os.path.exists(
-                    existing_job.status_file_path
-                ):
-                    existing_mtime = os.path.getmtime(existing_job.status_file_path)
-                    current_mtime = os.path.getmtime(file_path)
+                # Check if the job status has changed by comparing actual status values
+                should_update = (
+                    existing_job.status != job_info["status"]
+                    or existing_job.exit_code != job_info["exit_code"]
+                    or existing_job.end_time != job_info["end_time"]
+                )
 
-                    if current_mtime <= existing_mtime:
-                        should_update = False
-                        print(
-                            f"Skipping update for job {job_info['name']} - "
-                            f"current status file is not newer than existing"
-                        )
+                if not should_update:
+                    print(
+                        f"Skipping update for job {job_info['name']} - "
+                        f"no changes detected in status"
+                    )
 
                 if should_update:
                     # Update existing job with newer information
