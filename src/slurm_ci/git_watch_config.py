@@ -27,14 +27,14 @@ class GitWatchConfig:
     @classmethod
     def from_file(cls, config_path: str) -> "GitWatchConfig":
         """Load configuration from a TOML file."""
-        config_path = Path(config_path).resolve()
-        if not config_path.exists():
-            raise FileNotFoundError(f"Configuration file not found: {config_path}")
+        config_path_obj = Path(config_path).resolve()
+        if not config_path_obj.exists():
+            raise FileNotFoundError(f"Configuration file not found: {config_path_obj}")
 
-        with open(config_path, "r") as f:
+        with open(config_path_obj, "r") as f:
             config_data = toml.load(f)
 
-        config_dir = config_path.parent
+        config_dir = config_path_obj.parent
         slurm_ci_config = config_data.get("slurm-ci", {})
 
         # Resolve paths to be absolute relative to the config file

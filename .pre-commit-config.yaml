@@ -21,3 +21,23 @@ repos:
     # Run Ruff formatter (code styling)
     - id: ruff-format
       types_or: [python, pyi]
+
+- repo: local
+  hooks:
+    - id: ty-check
+      name: ty-check
+      entry: ty
+      args: [check, --python-version, "3.12", src]
+      language: python
+      additional_dependencies:
+        - ty
+        - flask
+        - requests
+        - sqlalchemy
+        - pyyaml
+        - docker
+        - toml
+        - psutil
+        - jinja2
+      pass_filenames: false
+      types_or: [python, pyi]

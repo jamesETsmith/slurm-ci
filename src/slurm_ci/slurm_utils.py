@@ -2,13 +2,13 @@
 
 import logging
 import subprocess
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 
 logger = logging.getLogger(__name__)
 
 
-def get_job_info_from_sacct(job_id: int) -> Optional[Dict[str, str]]:
+def get_job_info_from_sacct(job_id: int) -> Optional[Dict[str, Any]]:
     """Query sacct for job information.
 
     Args:

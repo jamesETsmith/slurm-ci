@@ -7,7 +7,7 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import requests
 import toml
@@ -292,7 +292,7 @@ class GitWatcher:
             )
 
             for tracker in running_commits:
-                commit_sha = tracker.commit_sha
+                commit_sha = cast(str, tracker.commit_sha)
                 self.logger.debug(f"Checking status of running commit: {commit_sha}")
 
                 # Look for status files related to this commit

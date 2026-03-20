@@ -76,7 +76,7 @@ def all_logs() -> str:
 
     # Scan all .toml files in the status directory
     for toml_file in sorted(
-        status_dir.glob("*.toml"), key=os.path.getmtime, reverse=True
+        status_dir.glob("*.toml"), key=lambda p: p.stat().st_mtime, reverse=True
     ):
         try:
             with open(toml_file, "r") as f:
@@ -310,7 +310,7 @@ def job_log(job_id: int) -> Response:
     if not job.log_file_path:
         abort(404, description="No log file available for this job")
 
-    log_file_path = job.log_file_path
+    log_file_path = str(job.log_file_path)
     if not os.path.exists(log_file_path):
         # Check if file exists and provide more detailed error
         from pathlib import Path
@@ -365,11 +365,12 @@ def download_log(job_id: int) -> Response:
     if not job:
         abort(404)
 
-    if not job.log_file_path or not os.path.exists(job.log_file_path):
+    job_log_file_path = str(job.log_file_path) if job.log_file_path else ""
+    if not job_log_file_path or not os.path.exists(job_log_file_path):
         abort(404, description="Log file not found")
 
     try:
-        return send_file(job.log_file_path, as_attachment=True)
+        return send_file(job_log_file_path, as_attachment=True)
     except Exception as e:
         abort(500, description=f"Error sending log file: {str(e)}")
 
@@ -387,7 +388,7 @@ def job_status(job_id: int) -> Response:
     if not job.status_file_path:
         abort(404, description="No status file available for this job")
 
-    status_file_path = job.status_file_path
+    status_file_path = str(job.status_file_path)
     if not os.path.exists(status_file_path):
         # Check if file exists and provide more detailed error
         from pathlib import Path
@@ -482,11 +483,12 @@ def download_status(job_id: int) -> Response:
     if not job:
         abort(404)
 
-    if not job.status_file_path or not os.path.exists(job.status_file_path):
+    job_status_file_path = str(job.status_file_path) if job.status_file_path else ""
+    if not job_status_file_path or not os.path.exists(job_status_file_path):
         abort(404, description="Status file not found")
 
     try:
-        return send_file(job.status_file_path, as_attachment=True)
+        return send_file(job_status_file_path, as_attachment=True)
     except Exception as e:
         abort(500, description=f"Error sending status file: {str(e)}")
 
@@ -504,11 +506,11 @@ def debug_logs() -> str:
             "job_id": job.id,
             "job_name": job.name,
             "log_file_path": job.log_file_path,
-            "file_exists": os.path.exists(job.log_file_path)
+            "file_exists": os.path.exists(str(job.log_file_path))
             if job.log_file_path
             else False,
-            "file_size": os.path.getsize(job.log_file_path)
-            if job.log_file_path and os.path.exists(job.log_file_path)
+            "file_size": os.path.getsize(str(job.log_file_path))
+            if job.log_file_path and os.path.exists(str(job.log_file_path))
             else 0,
         }
         log_info.append(info)

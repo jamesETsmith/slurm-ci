@@ -4,7 +4,7 @@ import os
 import subprocess
 import time
 from collections import OrderedDict
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import toml
 
@@ -21,7 +21,7 @@ class StatusFile:
         self,
         workflow_file: str,
         working_directory: str,
-        matrix_args: dict,
+        matrix_args: Dict[str, Any],
         git_repo_url: Optional[str] = None,
         git_repo_branch: Optional[str] = None,
     ) -> None:
@@ -38,7 +38,7 @@ class StatusFile:
         else:
             self.logger.info("Regular mode - will use local git commands")
 
-        self.data = OrderedDict(
+        self.data: Dict[str, Any] = OrderedDict(
             {
                 # Project/workflow info
                 "project": {
@@ -113,7 +113,7 @@ class StatusFile:
             logger.error(f"Failed to load StatusFile from {status_file}: {e}")
             raise
 
-    def read(self) -> Dict:
+    def read(self) -> Dict[str, Any]:
         with open(self.status_file, "r") as f:
             return toml.load(f)
 

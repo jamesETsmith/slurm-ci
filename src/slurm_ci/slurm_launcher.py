@@ -2,11 +2,11 @@ import os
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from jinja2 import Environment, FileSystemLoader, Template
 
-import slurm_ci
+import slurm_ci.config as slurm_config
 from slurm_ci.config import STATUS_DIR
 from slurm_ci.slurm_run_config import apply_matrix_mappings
 from slurm_ci.status_file import StatusFile
@@ -235,7 +235,7 @@ def build_act_command(
     if dryrun:
         act_args += " --dryrun"
 
-    return f"{slurm_ci.config.ACT_BINARY} {act_args}"
+    return f"{slurm_config.ACT_BINARY} {act_args}"
 
 
 def _launch_single_job(
@@ -261,9 +261,9 @@ def _launch_single_job(
         git_repo: Git repository info (url, branch, commit_sha) for cloning
             on compute node
     """
-    combo = status_file.data["matrix"]
-    working_directory = status_file.data["project"]["working_directory"]
-    workflow_file = status_file.data["project"]["workflow_file"]
+    combo = cast(Dict[str, Any], status_file.data["matrix"])
+    working_directory = str(status_file.data["project"]["working_directory"])
+    workflow_file = str(status_file.data["project"]["workflow_file"])
 
     task_name = "_".join([str(value) for value in combo.values()])
     print(str(combo))
@@ -350,9 +350,9 @@ def relaunch_slurm_job(
     """
     # Create a new status file for the relaunch to get new log/status file paths
     new_status_file = StatusFile(
-        workflow_file=status_file.data["project"]["workflow_file"],
-        working_directory=status_file.data["project"]["working_directory"],
-        matrix_args=status_file.data["matrix"],
+        workflow_file=str(status_file.data["project"]["workflow_file"]),
+        working_directory=str(status_file.data["project"]["working_directory"]),
+        matrix_args=cast(Dict[str, Any], status_file.data["matrix"]),
         git_repo_url=status_file.git_repo_url,
         git_repo_branch=status_file.git_repo_branch,
     )

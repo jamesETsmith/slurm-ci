@@ -72,8 +72,8 @@ def test_git_watch_stop_nonexistent_daemon() -> None:
         text=True,
     )
 
-    # Command should fail gracefully
-    assert result.returncode == 0  # DaemonManager handles this gracefully
+    # Command should fail gracefully with non-zero exit
+    assert result.returncode == 1
     assert "No PID file found" in result.stdout or "not running" in result.stdout
 
 

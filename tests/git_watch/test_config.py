@@ -150,7 +150,8 @@ working_directory = "/tmp/work-dir"
             os.unlink(f.name)
 
 
-def test_config_file_not_found() -> None:
+def test_config_file_not_found(tmp_path) -> None:
     """Test error handling for missing configuration file."""
+    missing_file = tmp_path / "missing-config.toml"
     with pytest.raises(FileNotFoundError):
-        GitWatchConfig.from_file("/nonexistent/config.toml")
+        GitWatchConfig.from_file(str(missing_file))

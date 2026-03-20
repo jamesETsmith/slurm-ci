@@ -30,7 +30,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pre-commit", "pytest-cov"]
+dev = ["pre-commit", "pytest-cov", "ty"]
 
 [project.urls]
 "Homepage" = "https://github.com/jamesETsmith/slurm-ci"
@@ -51,6 +51,9 @@ line-length = 88
 # I = isort
 # ANN = flake8-annotations (for type checking)
 select = ["E", "F", "W", "I", "ANN"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ANN"]
 
 [tool.ruff.lint.isort]
 # Sorts imports automatically

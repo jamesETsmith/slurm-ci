@@ -15,7 +15,7 @@ from .slurm_utils import get_job_info_from_sacct
 class StatusWatcher:
     """Watches the status directory and synchronizes TOML files with the database."""
 
-    def __init__(self, status_dir: str = None) -> None:
+    def __init__(self, status_dir: Optional[str] = None) -> None:
         self.status_dir = Path(status_dir or STATUS_DIR)
         self._processed_files = {}  # filename -> last_modified_time
 
@@ -340,13 +340,15 @@ class StatusWatcher:
             print("Status watcher stopped")
 
 
-def sync_status_to_db(status_dir: str = None) -> int:
+def sync_status_to_db(status_dir: Optional[str] = None) -> int:
     """One-time sync of all status files to database."""
     watcher = StatusWatcher(status_dir)
     return watcher.sync_all_files()
 
 
-def start_status_watcher(status_dir: str = None, poll_interval: int = 30) -> None:
+def start_status_watcher(
+    status_dir: Optional[str] = None, poll_interval: int = 30
+) -> None:
     """Start the status directory watcher."""
     watcher = StatusWatcher(status_dir)
     watcher.watch_directory(poll_interval)
