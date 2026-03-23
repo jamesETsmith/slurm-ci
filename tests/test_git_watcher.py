@@ -185,6 +185,41 @@ class TestGitWatcherFetchCommit:
 
         assert commit is None
 
+    @patch("slurm_ci.git_watcher.init_db")
+    @patch("slurm_ci.git_watcher.SessionLocal")
+    @patch("slurm_ci.git_watcher.DaemonManager")
+    @patch("slurm_ci.git_watcher.subprocess.check_output")
+    def test_fetch_latest_commits_wildcard_branch(
+        self,
+        mock_check_output: Mock,
+        mock_dm: Mock,
+        mock_session_class: Mock,
+        mock_init_db: Mock,
+        sample_config: GitWatchConfig,
+    ) -> None:
+        """Test fetching branch heads for wildcard branch patterns."""
+        mock_session = Mock()
+        mock_session_class.return_value = mock_session
+
+        mock_query = Mock()
+        mock_query.filter.return_value.first.return_value = None
+        mock_session.query.return_value = mock_query
+
+        sample_config.branch = "release/*"
+        mock_check_output.return_value = (
+            b"111111111111\trefs/heads/release/1.0\n"
+            b"222222222222\trefs/heads/release/2.0\n"
+            b"333333333333\trefs/heads/main\n"
+        )
+
+        watcher = GitWatcher(sample_config)
+        commits = watcher._fetch_latest_commits()
+
+        assert commits == [
+            ("111111111111", "release/1.0"),
+            ("222222222222", "release/2.0"),
+        ]
+
 
 class TestGitWatcherShouldProcessCommit:
     """Tests for determining if a commit should be processed."""
@@ -516,6 +551,56 @@ class TestGitWatcherPollOnce:
         watcher = GitWatcher(sample_config)
         # Should not crash
         watcher._poll_once()
+
+    @patch("slurm_ci.git_watcher.launch_slurm_jobs")
+    @patch("slurm_ci.git_watcher.subprocess.check_output")
+    @patch("slurm_ci.git_watcher.init_db")
+    @patch("slurm_ci.git_watcher.SessionLocal")
+    @patch("slurm_ci.git_watcher.DaemonManager")
+    def test_poll_once_wildcard_processes_multiple_branches(
+        self,
+        mock_dm: Mock,
+        mock_session_class: Mock,
+        mock_init_db: Mock,
+        mock_check_output: Mock,
+        mock_launch: Mock,
+        sample_config: GitWatchConfig,
+    ) -> None:
+        """Test polling triggers CI for each matching wildcard branch head."""
+        mock_session = Mock()
+        mock_session_class.return_value = mock_session
+        sample_config.branch = "release/*"
+
+        mock_check_output.return_value = (
+            b"aaa111\trefs/heads/release/1.0\nbbb222\trefs/heads/release/2.0\n"
+        )
+
+        mock_repo = Mock()
+        mock_repo.id = 1
+
+        mock_query = Mock()
+        mock_query.filter.return_value.first.side_effect = [
+            None,  # init: no existing repo
+            mock_repo,  # should_process_commit for first branch commit
+            None,  # no tracker for first commit
+            mock_repo,  # update_commit_status for first branch commit
+            None,  # no tracker for first commit status update
+            mock_repo,  # should_process_commit for second branch commit
+            None,  # no tracker for second commit
+            mock_repo,  # update_commit_status for second branch commit
+            None,  # no tracker for second commit status update
+        ]
+        mock_query.filter.return_value.all.return_value = []  # no running commits
+        mock_session.query.return_value = mock_query
+
+        watcher = GitWatcher(sample_config)
+        watcher._poll_once()
+
+        assert mock_launch.call_count == 2
+        first_call = mock_launch.call_args_list[0][1]
+        second_call = mock_launch.call_args_list[1][1]
+        assert first_call["git_repo_branch"] == "release/1.0"
+        assert second_call["git_repo_branch"] == "release/2.0"
 
 
 class TestGitWatcherCheckRunningJobs:

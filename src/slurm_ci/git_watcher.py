@@ -6,6 +6,7 @@ import os
 import subprocess
 import time
 from datetime import datetime
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Optional, cast
 
@@ -134,16 +135,52 @@ class GitWatcher:
         finally:
             session.close()
 
-    def _fetch_latest_commit(self) -> Optional[str]:
-        """Fetch the latest commit SHA from GitHub API."""
+    def _branch_ref_pattern(self) -> str:
+        """Build a git ref pattern for ls-remote from config branch."""
+        branch = self.config.branch
+        if branch.startswith("refs/"):
+            return branch
+        return f"refs/heads/{branch}"
+
+    def _fetch_latest_commits(self) -> list[tuple[str, str]]:
+        """Fetch latest commit SHAs and branch names from git refs."""
         try:
-            commit_hash = subprocess.check_output(
-                ["git", "ls-remote", self.config.repo_url, self.config.branch]
+            ref_pattern = self._branch_ref_pattern()
+            ls_remote_output = subprocess.check_output(
+                ["git", "ls-remote", self.config.repo_url, ref_pattern]
             )
-            return commit_hash.decode("utf-8").split("\t")[0]
+            branch_pattern = self.config.branch.removeprefix("refs/heads/")
+
+            commits_by_branch: dict[str, str] = {}
+            for line in ls_remote_output.decode("utf-8").splitlines():
+                parts = line.split("\t", maxsplit=1)
+                if len(parts) != 2:
+                    continue
+
+                commit_sha, ref_name = parts
+                if not ref_name.startswith("refs/heads/"):
+                    continue
+
+                branch_name = ref_name.removeprefix("refs/heads/")
+                if not fnmatch(branch_name, branch_pattern):
+                    continue
+
+                commits_by_branch[branch_name] = commit_sha
+
+            return [
+                (commit_sha, branch_name)
+                for branch_name, commit_sha in sorted(commits_by_branch.items())
+            ]
         except Exception as e:
-            self.logger.error(f"Error fetching latest commit: {e}")
+            self.logger.error(f"Error fetching latest commits: {e}")
+            return []
+
+    def _fetch_latest_commit(self) -> Optional[str]:
+        """Fetch the latest commit SHA for compatibility with existing callers."""
+        commits = self._fetch_latest_commits()
+        if not commits:
             return None
+        return commits[0][0]
 
     def _should_process_commit(self, commit_sha: str) -> bool:
         """Check if a commit should be processed based on its current status."""
@@ -381,9 +418,11 @@ class GitWatcher:
 
         return status_files
 
-    def _trigger_ci_job(self, commit_sha: str) -> bool:
+    def _trigger_ci_job(self, commit_sha: str, branch: Optional[str] = None) -> bool:
         """Trigger a CI job for the given commit."""
         try:
+            target_branch = branch or self.config.branch
+
             # Construct workflow file path from config directory (not repo)
             workflow_file = Path(self.config.workflow_file)
             if not workflow_file.exists():
@@ -395,14 +434,14 @@ class GitWatcher:
             # Prepare git repository information for SLURM jobs
             git_repo = {
                 "url": self.config.repo_url,
-                "branch": self.config.branch,
+                "branch": target_branch,
                 "commit_sha": commit_sha,
             }
 
             self.logger.info(f"Triggering CI job for commit: {commit_sha}")
             self.logger.info(f"Workflow file: {workflow_file}")
             self.logger.info(f"Repository: {self.config.repo_url}")
-            self.logger.info(f"Branch: {self.config.branch}")
+            self.logger.info(f"Branch: {target_branch}")
 
             # Launch slurm jobs with git repository info
             # Use a placeholder working directory since the actual repo will be
@@ -413,7 +452,7 @@ class GitWatcher:
                 dryrun=False,
                 git_repo=git_repo,
                 git_repo_url=self.config.repo_url,
-                git_repo_branch=self.config.branch,
+                git_repo_branch=target_branch,
                 custom_sbatch_options=self.config.slurm_options,
             )
 
@@ -431,35 +470,39 @@ class GitWatcher:
         # First, check status of any running jobs
         self._check_running_jobs()
 
-        # Fetch latest commit
-        latest_commit = self._fetch_latest_commit()
-        if not latest_commit:
-            self.logger.warning("Could not fetch latest commit")
+        # Fetch latest commits (supports wildcard branch patterns)
+        latest_commits = self._fetch_latest_commits()
+        if not latest_commits:
+            self.logger.warning("Could not fetch latest commit(s)")
             return
 
-        # Check if commit should be processed
-        if not self._should_process_commit(latest_commit):
-            self.logger.debug(f"Commit should not be processed: {latest_commit}")
-            return
+        for latest_commit, branch_name in latest_commits:
+            # Check if commit should be processed
+            if not self._should_process_commit(latest_commit):
+                self.logger.debug(f"Commit should not be processed: {latest_commit}")
+                continue
 
-        self.logger.info(f"Processing commit: {latest_commit}")
+            self.logger.info(
+                f"Processing commit: {latest_commit} on branch: {branch_name}"
+            )
 
-        # Mark commit as running before triggering job
-        self._update_commit_status(
-            latest_commit, CommitStatus.RUNNING, build_triggered=True
-        )
-
-        # Trigger CI job
-        job_triggered = self._trigger_ci_job(latest_commit)
-
-        if not job_triggered:
-            # If job failed to trigger, mark as exception for retry
+            # Mark commit as running before triggering job
             self._update_commit_status(
-                latest_commit, CommitStatus.EXCEPTION, build_triggered=False
+                latest_commit, CommitStatus.RUNNING, build_triggered=True
             )
-            self.logger.error(
-                f"Failed to trigger job for commit {latest_commit}, marked as exception"
-            )
+
+            # Trigger CI job
+            job_triggered = self._trigger_ci_job(latest_commit, branch_name)
+
+            if not job_triggered:
+                # If job failed to trigger, mark as exception for retry
+                self._update_commit_status(
+                    latest_commit, CommitStatus.EXCEPTION, build_triggered=False
+                )
+                self.logger.error(
+                    f"Failed to trigger job for commit {latest_commit}, "
+                    "marked as exception"
+                )
 
         # Update status file
         self.daemon_manager.write_status_file(
@@ -467,7 +510,7 @@ class GitWatcher:
             self.config,
             status="running",
             last_check=datetime.now(),
-            last_commit=latest_commit,
+            last_commit=latest_commits[0][0],
         )
 
     def run(self) -> None:
