@@ -2,7 +2,7 @@
 
 import sys
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -98,3 +98,60 @@ def test_db_sync_command_invokes_sync_function() -> None:
     ):
         run_main_with_args(["db-sync", "--status-dir", "/tmp/status"])
         mock_sync.assert_called_once_with("/tmp/status")
+
+
+def test_services_up_starts_manager_services() -> None:
+    manager = SimpleNamespace(start_service=Mock(return_value=(True, "started")))
+    with (
+        patch("slurm_ci.cli.shutil.which", return_value="/tmp/act"),
+        patch("slurm_ci.cli.ServiceManager", return_value=manager),
+        patch("slurm_ci.cli.init_db") as mock_init_db,
+        patch("slurm_ci.cli._is_port_available", return_value=True),
+    ):
+        run_main_with_args(["services", "up"])
+        mock_init_db.assert_called_once()
+        assert manager.start_service.call_count == 2
+
+
+def test_services_up_fails_when_port_occupied() -> None:
+    with (
+        patch("slurm_ci.cli.shutil.which", return_value="/tmp/act"),
+        patch("slurm_ci.cli._is_port_available", return_value=False),
+        patch("slurm_ci.cli.sys.exit", side_effect=SystemExit(1)),
+    ):
+        with pytest.raises(SystemExit):
+            run_main_with_args(["services", "up", "--port", "5001"])
+
+
+def test_services_down_calls_stop_for_each_service() -> None:
+    manager = SimpleNamespace(
+        read_pid_file=Mock(side_effect=[123, 456]),
+        stop_service=Mock(return_value=True),
+    )
+    with (
+        patch("slurm_ci.cli.shutil.which", return_value="/tmp/act"),
+        patch("slurm_ci.cli.ServiceManager", return_value=manager),
+    ):
+        run_main_with_args(["services", "down"])
+        assert manager.stop_service.call_count == 2
+
+
+def test_services_status_lists_both_services() -> None:
+    manager = SimpleNamespace(
+        list_services=Mock(
+            return_value=[
+                {"service_name": "db-watch", "running": True, "log_file": "/tmp/a.log"},
+                {
+                    "service_name": "dashboard",
+                    "running": False,
+                    "log_file": "/tmp/b.log",
+                },
+            ]
+        )
+    )
+    with (
+        patch("slurm_ci.cli.shutil.which", return_value="/tmp/act"),
+        patch("slurm_ci.cli.ServiceManager", return_value=manager),
+    ):
+        run_main_with_args(["services", "status"])
+        manager.list_services.assert_called_once()

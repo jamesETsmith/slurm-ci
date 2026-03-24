@@ -3,6 +3,7 @@ import argparse
 import os
 import platform
 import shutil
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -15,6 +16,7 @@ from slurm_ci.git_watch_config import (
     create_example_config as create_git_watch_example_config,
 )
 from slurm_ci.git_watcher import start_git_watcher
+from slurm_ci.service_manager import ServiceManager
 from slurm_ci.slurm_launcher import launch_slurm_jobs, relaunch_slurm_job
 from slurm_ci.slurm_run_config import (
     SlurmRunConfig,
@@ -24,6 +26,10 @@ from slurm_ci.slurm_run_config import (
 )
 from slurm_ci.status_file import StatusFile
 from slurm_ci.status_watcher import start_status_watcher, sync_status_to_db
+
+
+SERVICE_DB_WATCH = "db-watch"
+SERVICE_DASHBOARD = "dashboard"
 
 
 def local_run(args: argparse.Namespace, unknown_args: list[str]) -> None:
@@ -272,6 +278,125 @@ def git_watch_create_config(args: argparse.Namespace) -> None:
     create_git_watch_example_config(output_path)
 
 
+def _is_port_available(host: str, port: int) -> bool:
+    """Return whether a TCP host/port pair can be bound."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind((host, port))
+        except OSError:
+            return False
+    return True
+
+
+def services_up(args: argparse.Namespace) -> None:
+    """Start support services for local development."""
+    manager = ServiceManager()
+
+    if not args.skip_db_init:
+        print("Initializing database...")
+        init_db()
+
+    if not _is_port_available(args.host, args.port):
+        print(f"Error: dashboard port is occupied on {args.host}:{args.port}")
+        sys.exit(1)
+
+    db_watch_command = [sys.executable, "-m", "slurm_ci.cli", "db-watch"]
+    if args.status_dir:
+        db_watch_command.extend(["--status-dir", args.status_dir])
+    db_watch_command.extend(["--interval", str(args.interval)])
+
+    dashboard_command = [
+        sys.executable,
+        "-m",
+        "slurm_ci.cli",
+        "dashboard",
+        "--host",
+        args.host,
+        "--port",
+        str(args.port),
+    ]
+
+    if args.dashboard_debug:
+        dashboard_command.append("--debug")
+
+    started, reason = manager.start_service(
+        SERVICE_DB_WATCH,
+        db_watch_command,
+        metadata={
+            "status_dir": args.status_dir,
+            "interval": args.interval,
+        },
+    )
+    if started:
+        print("Started db-watch service")
+    elif reason == "already-running":
+        print("db-watch service already running")
+
+    started, reason = manager.start_service(
+        SERVICE_DASHBOARD,
+        dashboard_command,
+        metadata={
+            "host": args.host,
+            "port": args.port,
+            "debug": args.dashboard_debug,
+        },
+    )
+    if started:
+        print("Started dashboard service")
+    elif reason == "already-running":
+        print("dashboard service already running")
+
+    print("Services are ready. Use 'slurm-ci services status' to inspect.")
+
+
+def services_down(args: argparse.Namespace) -> None:
+    """Stop support services for local development."""
+    manager = ServiceManager()
+    failures = 0
+
+    for service_name in [SERVICE_DASHBOARD, SERVICE_DB_WATCH]:
+        had_pid = manager.read_pid_file(service_name) is not None
+        stopped = manager.stop_service(
+            service_name, timeout=args.timeout, force=args.force
+        )
+        if stopped:
+            print(f"Stopped {service_name}")
+        else:
+            if not had_pid:
+                print(f"{service_name} was not running")
+            else:
+                print(f"Failed to stop {service_name}")
+                failures += 1
+
+    if failures > 0:
+        sys.exit(1)
+
+
+def services_status(args: argparse.Namespace) -> None:
+    """Show status for support services."""
+    manager = ServiceManager()
+    services = manager.list_services([SERVICE_DB_WATCH, SERVICE_DASHBOARD])
+    running_count = 0
+
+    for service in services:
+        state = "running" if service["running"] else "stopped"
+        if service["running"]:
+            running_count += 1
+
+        print(f"Service: {service['service_name']}")
+        print(f"  State: {state}")
+        print(f"  PID: {service.get('pid') or 'none'}")
+        print(f"  Started: {service.get('started_at') or 'unknown'}")
+        metadata = service.get("metadata", {})
+        if metadata:
+            for key, value in metadata.items():
+                print(f"  {key}: {value}")
+        print(f"  Log: {service['log_file']}")
+        print()
+
+    print(f"Running {running_count}/{len(services)} services")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="slurm-ci - A tool for running CI workflows locally or on Slurm."
@@ -433,6 +558,64 @@ def main() -> None:
         "--output", "-o", help="Output file path (default: git-watch-config.toml)."
     )
     parser_git_watch_create_config.set_defaults(func=git_watch_create_config)
+
+    # Subcommand: services
+    parser_services = subparsers.add_parser(
+        "services", help="Manage local support services (db-watch and dashboard)."
+    )
+    services_subparsers = parser_services.add_subparsers(
+        dest="services_command", required=True
+    )
+
+    parser_services_up = services_subparsers.add_parser(
+        "up", help="Start support services."
+    )
+    parser_services_up.add_argument(
+        "--status-dir",
+        help="Status directory for db-watch (default: ~/.slurm-ci/job_status)",
+    )
+    parser_services_up.add_argument(
+        "--interval",
+        type=int,
+        default=30,
+        help="db-watch polling interval in seconds (default: 30)",
+    )
+    parser_services_up.add_argument(
+        "--host", default="127.0.0.1", help="Dashboard host (default: 127.0.0.1)"
+    )
+    parser_services_up.add_argument(
+        "--port", type=int, default=5001, help="Dashboard port (default: 5001)"
+    )
+    parser_services_up.add_argument(
+        "--dashboard-debug", action="store_true", help="Run dashboard in debug mode"
+    )
+    parser_services_up.add_argument(
+        "--skip-db-init",
+        action="store_true",
+        help="Skip database initialization before starting services",
+    )
+    parser_services_up.set_defaults(func=services_up)
+
+    parser_services_down = services_subparsers.add_parser(
+        "down", help="Stop support services."
+    )
+    parser_services_down.add_argument(
+        "--timeout",
+        type=int,
+        default=30,
+        help="Graceful shutdown timeout in seconds (default: 30)",
+    )
+    parser_services_down.add_argument(
+        "--force",
+        action="store_true",
+        help="Force kill services if graceful shutdown times out",
+    )
+    parser_services_down.set_defaults(func=services_down)
+
+    parser_services_status = services_subparsers.add_parser(
+        "status", help="Show support service status."
+    )
+    parser_services_status.set_defaults(func=services_status)
 
     #
     # Parse arguments
