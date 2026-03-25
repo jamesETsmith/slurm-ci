@@ -18,29 +18,14 @@
     </div>
 
     <h3>Jobs</h3>
-    <table id="jobs-table" class="centered-table">
+    <table id="jobs-table" class="centered-table" data-datatable="true" data-per-page="50">
         <thead>
             <tr>
                 {% for key in matrix_arg_keys %}
-                    <th data-sort-key="{{ key }}">
-                        <div class="sortable-header">
-                            <span>{{ key|replace('_version', '') }}</span>
-                            <button class="sort-btn">↕</button>
-                        </div>
-                    </th>
+                    <th>{{ key|replace('_version', '') }}</th>
                 {% endfor %}
-                <th data-sort-key="status">
-                    <div class="sortable-header">
-                        <span>Status</span>
-                        <button class="sort-btn">↕</button>
-                    </div>
-                </th>
-                <th data-sort-key="duration">
-                    <div class="sortable-header">
-                        <span>Duration</span>
-                        <button class="sort-btn">↕</button>
-                    </div>
-                </th>
+                <th>Status</th>
+                <th>Duration</th>
                 <th>Log</th>
                 <th>Status File</th>
             </tr>
@@ -175,51 +160,5 @@
             });
         });
 
-        document.addEventListener('DOMContentLoaded', function() {
-            const table = document.getElementById('jobs-table');
-            const headers = table.querySelectorAll('thead th[data-sort-key]');
-            const tbody = table.querySelector('tbody');
-
-            headers.forEach(function(header, index) {
-                const sortBtn = header.querySelector('.sort-btn');
-                if (!sortBtn) return;
-
-                let sortOrder = 'asc';
-
-                sortBtn.addEventListener('click', function() {
-                    const rows = Array.from(tbody.querySelectorAll('tr'));
-
-                    const sortedRows = rows.sort(function(a, b) {
-                        const aValue = a.cells[index].textContent.trim();
-                        const bValue = b.cells[index].textContent.trim();
-
-                        if (aValue === '-' || bValue === '-') {
-                            return aValue === '-' ? 1 : -1;
-                        }
-
-                        // numeric sort for duration
-                        if (header.getAttribute('data-sort-key') === 'duration') {
-                            const aNum = parseFloat(aValue);
-                            const bNum = parseFloat(bValue);
-                            return sortOrder === 'asc' ? aNum - bNum : bNum - aNum;
-                        }
-
-                        return sortOrder === 'asc'
-                            ? aValue.localeCompare(bValue)
-                            : bValue.localeCompare(aValue);
-                    });
-
-                    rows.forEach(function(row) {
-                        tbody.removeChild(row);
-                    });
-
-                    sortedRows.forEach(function(row) {
-                        tbody.appendChild(row);
-                    });
-
-                    sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
-                });
-            });
-        });
     </script>
 {% endblock %}

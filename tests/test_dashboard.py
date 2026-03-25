@@ -49,6 +49,7 @@ def test_logs_route_reads_status_files(tmp_path: Path) -> None:
         assert resp.status_code == 200
         log_entries = mock_render.call_args.kwargs["log_entries"]
         assert any(entry["project_name"] == "proj" for entry in log_entries)
+        assert all("status" in entry for entry in log_entries)
 
 
 def test_raw_log_and_status_routes(tmp_path: Path) -> None:
@@ -100,6 +101,82 @@ def test_build_detail_route_parses_matrix_args() -> None:
         assert resp.status_code == 200
         assert build.jobs[0].matrix_args_parsed["os"] == "ubuntu"
         assert "os" in mock_render.call_args.kwargs["matrix_arg_keys"]
+        assert mock_render.call_args.kwargs["data_source"] == "sqlite"
+
+
+def test_index_route_filter_and_summary_context() -> None:
+    build = SimpleNamespace(
+        id=1,
+        status="failed",
+        branch="main",
+        workflow_file=".github/workflows/test.yml",
+        created_at=SimpleNamespace(strftime=lambda _fmt: "2025-01-01 00:00:00"),
+        jobs=[
+            SimpleNamespace(
+                status="failed",
+                start_time=None,
+                end_time=None,
+            )
+        ],
+    )
+    query = Mock()
+    query.options.return_value = query
+    query.order_by.return_value = query
+    query.filter.return_value = query
+    query.all.return_value = [build]
+
+    # Second query in _load_builds_context (all_builds)
+    query_all = Mock()
+    query_all.order_by.return_value = query_all
+    query_all.all.return_value = [build]
+
+    db = Mock()
+    db.query.side_effect = [query, query_all]
+
+    with (
+        patch("slurm_ci.dashboard.SessionLocal", return_value=db),
+        patch(
+            "slurm_ci.dashboard.render_template", return_value="index"
+        ) as mock_render,
+    ):
+        client = dashboard.app.test_client()
+        resp = client.get("/?status=failed&branch=main&workflow=test.yml")
+        assert resp.status_code == 200
+        kwargs = mock_render.call_args.kwargs
+        assert kwargs["filters"]["status"] == "failed"
+        assert kwargs["summary"]["status_counts"]["failed"] == 1
+        assert kwargs["data_source"] == "sqlite"
+
+
+def test_index_partials_render() -> None:
+    build = SimpleNamespace(
+        id=2,
+        status="completed",
+        branch="dev",
+        workflow_file="workflow.yml",
+        created_at=SimpleNamespace(strftime=lambda _fmt: "2025-01-01 00:00:00"),
+        jobs=[],
+    )
+    query = Mock()
+    query.options.return_value = query
+    query.order_by.return_value = query
+    query.filter.return_value = query
+    query.all.return_value = [build]
+
+    query_all = Mock()
+    query_all.order_by.return_value = query_all
+    query_all.all.return_value = [build]
+
+    db = Mock()
+    db.query.side_effect = [query, query_all, query, query_all]
+
+    with (
+        patch("slurm_ci.dashboard.SessionLocal", return_value=db),
+        patch("slurm_ci.dashboard.render_template", return_value="partial"),
+    ):
+        client = dashboard.app.test_client()
+        assert client.get("/partials/index_summary").status_code == 200
+        assert client.get("/partials/index_table").status_code == 200
 
 
 def test_job_log_and_download_routes(tmp_path: Path) -> None:
@@ -140,7 +217,15 @@ def test_debug_logs_route(tmp_path: Path) -> None:
     with patch("slurm_ci.dashboard.SessionLocal", return_value=db):
         client = dashboard.app.test_client()
         resp = client.get("/debug/logs")
-        assert resp.status_code == 200
-        body = resp.get_data(as_text=True)
+        assert resp.status_code == 404
+
+    with (
+        patch("slurm_ci.dashboard.SessionLocal", return_value=db),
+        patch.dict("os.environ", {"SLURM_CI_ENABLE_DEBUG_ROUTES": "1"}),
+    ):
+        client = dashboard.app.test_client()
+        enabled_resp = client.get("/debug/logs")
+        assert enabled_resp.status_code == 200
+        body = enabled_resp.get_data(as_text=True)
         assert "Debug: Log Files Status" in body
         assert "n1" in body

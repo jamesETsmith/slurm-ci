@@ -2,8 +2,38 @@
 
 {% block content %}
 <h2>All Job Logs from .slurm-ci/job_status</h2>
-<p>Showing all logs from the status directory (no deduplication)</p>
-<table class="centered-table">
+<p>Filesystem view of status files and logs (no deduplication).</p>
+<form id="log-filters" method="get" action="{{ url_for('all_logs') }}" class="filters">
+    <label>
+        Status
+        <select name="status">
+            <option value="">All</option>
+            {% for status_option in filter_options.status %}
+            <option value="{{ status_option }}" {% if filters.status == status_option %}selected{% endif %}>
+                {{ status_option }}
+            </option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>
+        Branch
+        <select name="branch">
+            <option value="">All</option>
+            {% for branch_option in filter_options.branch %}
+            <option value="{{ branch_option }}" {% if filters.branch == branch_option %}selected{% endif %}>
+                {{ branch_option }}
+            </option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>
+        Workflow
+        <input type="text" name="workflow" value="{{ filters.workflow }}" placeholder="workflow.yml">
+    </label>
+    <button type="submit">Apply</button>
+    <a href="{{ url_for('all_logs') }}">Reset</a>
+</form>
+<table id="logs-table" class="centered-table" data-datatable="true" data-per-page="25">
     <thead>
         <tr>
             <th>Project</th>
@@ -12,6 +42,7 @@
             <th>Branch</th>
             <th>Matrix Args</th>
             <th>SLURM Job ID</th>
+            <th>Status</th>
             <th>Exit Code</th>
             <th>Started At</th>
             <th>Ended At</th>
@@ -36,6 +67,7 @@
                 {% endif %}
             </td>
             <td>{{ entry.slurm_job_id if entry.slurm_job_id else '-' }}</td>
+            <td><span class="status-{{ entry.status }}">{{ entry.status }}</span></td>
             <td>
                 {% if entry.exit_code is not none %}
                 {% if entry.exit_code == 0 %}
@@ -74,7 +106,7 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="10">No logs found in .slurm-ci/job_status directory.</td>
+            <td colspan="11">No logs found in .slurm-ci/job_status directory.</td>
         </tr>
         {% endfor %}
     </tbody>

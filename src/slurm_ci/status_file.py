@@ -27,6 +27,7 @@ class StatusFile:
     ) -> None:
         self.git_repo_url = git_repo_url
         self.git_repo_branch = git_repo_branch
+        self.working_directory = os.path.abspath(working_directory)
         self.logger = logging.getLogger(__name__)
 
         # Log initialization details
@@ -44,7 +45,7 @@ class StatusFile:
                 "project": {
                     "name": self.get_project_name(),
                     "workflow_file": workflow_file,
-                    "working_directory": working_directory,
+                    "working_directory": self.working_directory,
                 },
                 # Git info
                 "git": {
@@ -157,7 +158,9 @@ class StatusFile:
             self.logger.debug("Getting git hash from local repository")
             try:
                 result = (
-                    subprocess.check_output(["git", "rev-parse", "HEAD"])
+                    subprocess.check_output(
+                        ["git", "rev-parse", "HEAD"], cwd=self.working_directory
+                    )
                     .decode("utf-8")
                     .strip()
                 )
@@ -177,7 +180,10 @@ class StatusFile:
             self.logger.debug("Getting project name from local repository")
             try:
                 result = os.path.basename(
-                    subprocess.check_output(["git", "rev-parse", "--show-toplevel"])
+                    subprocess.check_output(
+                        ["git", "rev-parse", "--show-toplevel"],
+                        cwd=self.working_directory,
+                    )
                     .decode("utf-8")
                     .strip()
                 )
@@ -191,7 +197,10 @@ class StatusFile:
         self.logger.debug("Getting git branch from local repository")
         try:
             result = (
-                subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+                subprocess.check_output(
+                    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                    cwd=self.working_directory,
+                )
                 .decode("utf-8")
                 .strip()
             )

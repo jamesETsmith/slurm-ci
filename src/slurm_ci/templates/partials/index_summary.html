@@ -1,0 +1,35 @@
+<div class="summary-grid">
+    <div class="summary-card">
+        <div class="summary-label">Visible builds</div>
+        <div class="summary-value">{{ summary.total }}</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label">Running</div>
+        <div class="summary-value status-running">{{ summary.status_counts.running }}</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label">Failed</div>
+        <div class="summary-value status-failed">{{ summary.status_counts.failed }}</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label">Completed</div>
+        <div class="summary-value status-completed">{{ summary.status_counts.completed }}</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label">Pending</div>
+        <div class="summary-value status-pending">{{ summary.status_counts.pending }}</div>
+    </div>
+</div>
+
+{% if summary.last_update %}
+<p><small>Last update: {{ summary.last_update.strftime('%Y-%m-%d %H:%M:%S') }}</small></p>
+{% else %}
+<p><small>No build data available.</small></p>
+{% endif %}
+
+<canvas
+    id="build-duration-trend"
+    height="95"
+    data-labels='{{ trend_points | map(attribute="label") | list | tojson }}'
+    data-values='{{ trend_points | map(attribute="avg_duration_s") | list | tojson }}'
+    data-failed-values='{{ trend_points | map(attribute="failed_jobs") | list | tojson }}'></canvas>

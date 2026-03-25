@@ -6,6 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Slurm CI Dashboard</title>
     <link rel="stylesheet" href="https://cdn.simplecss.org/simple.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.1.0/dist/style.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.12"></script>
+    <script src="https://cdn.jsdelivr.net/npm/simple-datatables@9.1.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <style>
         /* Status indicators */
         .status-completed,
@@ -146,6 +150,62 @@
             margin: 0 auto;
             width: 90%;
         }
+
+        .meta-row {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .source-pill {
+            display: inline-block;
+            padding: 0.2rem 0.55rem;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            border: 1px solid #dee2e6;
+            background-color: #f8f9fa;
+            color: #495057;
+        }
+
+        .filters {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            align-items: end;
+            margin: 0.75rem 0 1rem 0;
+        }
+
+        .filters label {
+            display: grid;
+            gap: 0.2rem;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .summary-card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 0.7rem 0.8rem;
+            background: #fff;
+        }
+
+        .summary-label {
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin-bottom: 0.2rem;
+        }
+
+        .summary-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
     </style>
 </head>
 
@@ -162,11 +222,50 @@
         </nav>
     </header>
     <main>
+        {% if data_source %}
+        <div class="meta-row">
+            <span class="source-pill">Data source: {{ data_source }}</span>
+        </div>
+        {% endif %}
         {% block content %}{% endblock %}
     </main>
     <footer>
         <p>Slurm CI</p>
     </footer>
+    <script>
+        (function () {
+            const dtInstances = new Map();
+
+            function initDataTables(root) {
+                if (!window.simpleDatatables) return;
+                const scope = root || document;
+                const tables = scope.querySelectorAll('table[data-datatable="true"]');
+                tables.forEach((table) => {
+                    const key = table.id || table;
+                    if (dtInstances.has(key)) {
+                        dtInstances.get(key).destroy();
+                        dtInstances.delete(key);
+                    }
+                    const instance = new simpleDatatables.DataTable(table, {
+                        perPage: Number(table.dataset.perPage || 25),
+                        perPageSelect: [10, 25, 50, 100],
+                        searchable: table.dataset.searchable !== "false",
+                        fixedHeight: false
+                    });
+                    dtInstances.set(key, instance);
+                });
+            }
+
+            document.addEventListener("DOMContentLoaded", function () {
+                initDataTables(document);
+            });
+
+            document.body.addEventListener("htmx:afterSwap", function (event) {
+                initDataTables(event.target);
+            });
+        })();
+    </script>
+    {% block extra_scripts %}{% endblock %}
 </body>
 
 </html>

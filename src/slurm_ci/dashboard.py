@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 import toml
-from flask import Flask, Response, abort, render_template, send_file
+from flask import Flask, Response, abort, render_template, request, send_file
 from sqlalchemy.orm import joinedload
 
 from .config import STATUS_DIR
@@ -53,24 +53,121 @@ app.jinja_env.filters["timestamp_to_datetime"] = timestamp_to_datetime_filter
 app.jinja_env.filters["basename"] = basename_filter
 
 
-@app.route("/")
-def index() -> str:
+def _build_status_from_entry(entry: dict) -> str:
+    """Derive a coarse status for filesystem log entries."""
+    if entry.get("end_time") is None:
+        return "running" if entry.get("start_time") else "pending"
+    return "completed" if entry.get("exit_code") == 0 else "failed"
+
+
+def _load_builds_context() -> dict:
+    """Load filtered builds, options, summary data, and chart points."""
+    status = request.args.get("status", "").strip().lower()
+    branch = request.args.get("branch", "").strip()
+    workflow = request.args.get("workflow", "").strip()
+
     db = SessionLocal()
-    # Use eager loading to fetch jobs along with builds
-    # (in case template needs job info)
-    builds = (
+    query = (
         db.query(Build)
         .options(joinedload(Build.jobs))
         .order_by(Build.created_at.desc())
-        .all()
     )
+
+    if status:
+        query = query.filter(Build.status == status)
+    if branch:
+        query = query.filter(Build.branch == branch)
+    if workflow:
+        query = query.filter(Build.workflow_file.ilike(f"%{workflow}%"))
+
+    builds = query.all()
     db.close()
-    return render_template("index.html", builds=builds)
+
+    status_counts = {"pending": 0, "running": 0, "completed": 0, "failed": 0}
+    for build in builds:
+        build_status = str(build.status)
+        if build_status in status_counts:
+            status_counts[build_status] += 1
+
+    trend_points = []
+    for build in reversed(builds[:20]):
+        durations = []
+        for job in build.jobs:
+            if job.start_time and job.end_time:
+                durations.append((job.end_time - job.start_time).total_seconds())
+        trend_points.append(
+            {
+                "label": f"#{build.id}",
+                "avg_duration_s": round(sum(durations) / len(durations), 1)
+                if durations
+                else 0,
+                "failed_jobs": len(
+                    [job for job in build.jobs if job.status == "failed"]
+                ),
+            }
+        )
+
+    # Build options should remain global so users can pivot quickly.
+    db = SessionLocal()
+    all_builds = db.query(Build).order_by(Build.created_at.desc()).all()
+    db.close()
+
+    branch_options = sorted({b.branch for b in all_builds if b.branch})
+    workflow_options = sorted(
+        {
+            os.path.basename(str(b.workflow_file))
+            for b in all_builds
+            if b.workflow_file and os.path.basename(str(b.workflow_file))
+        }
+    )
+    status_options = ["pending", "running", "completed", "failed"]
+
+    return {
+        "builds": builds,
+        "summary": {
+            "total": len(builds),
+            "status_counts": status_counts,
+            "last_update": builds[0].created_at if builds else None,
+        },
+        "trend_points": trend_points,
+        "filters": {
+            "status": status,
+            "branch": branch,
+            "workflow": workflow,
+        },
+        "filter_options": {
+            "status": status_options,
+            "branch": branch_options,
+            "workflow": workflow_options,
+        },
+        "data_source": "sqlite",
+    }
+
+
+@app.route("/")
+def index() -> str:
+    context = _load_builds_context()
+    return render_template("index.html", **context)
+
+
+@app.route("/partials/index_summary")
+def index_summary_partial() -> str:
+    context = _load_builds_context()
+    return render_template("partials/index_summary.html", **context)
+
+
+@app.route("/partials/index_table")
+def index_table_partial() -> str:
+    context = _load_builds_context()
+    return render_template("partials/index_table.html", **context)
 
 
 @app.route("/logs")
 def all_logs() -> str:
     """Display all logs from .slurm-ci/job_status directory."""
+    status_filter = request.args.get("status", "").strip().lower()
+    branch_filter = request.args.get("branch", "").strip()
+    workflow_filter = request.args.get("workflow", "").strip()
     status_dir = Path(STATUS_DIR)
     log_entries = []
 
@@ -107,13 +204,48 @@ def all_logs() -> str:
                 else None,
                 "slurm_job_id": data.get("slurm", {}).get("job_id"),
             }
+            entry["status"] = _build_status_from_entry(entry)
+            if status_filter and entry["status"] != status_filter:
+                continue
+            if branch_filter and entry["git_branch"] != branch_filter:
+                continue
+            if (
+                workflow_filter
+                and workflow_filter.lower() not in entry["workflow_file"].lower()
+            ):
+                continue
             log_entries.append(entry)
         except Exception as e:
             # If we can't parse a file, skip it
             print(f"Error parsing {toml_file}: {e}")
             continue
 
-    return render_template("logs.html", log_entries=log_entries)
+    branch_options = sorted(
+        {entry["git_branch"] for entry in log_entries if entry["git_branch"]}
+    )
+    workflow_options = sorted(
+        {
+            os.path.basename(entry["workflow_file"])
+            for entry in log_entries
+            if entry["workflow_file"]
+        }
+    )
+
+    return render_template(
+        "logs.html",
+        log_entries=log_entries,
+        filters={
+            "status": status_filter,
+            "branch": branch_filter,
+            "workflow": workflow_filter,
+        },
+        filter_options={
+            "status": ["pending", "running", "completed", "failed"],
+            "branch": branch_options,
+            "workflow": workflow_options,
+        },
+        data_source="filesystem",
+    )
 
 
 @app.route("/raw_log/<path:filename>")
@@ -294,6 +426,7 @@ def build_detail(build_id: int) -> str:
         "build_detail.html",
         build=build,
         matrix_arg_keys=sorted_matrix_arg_keys,
+        data_source="sqlite",
     )
 
 
@@ -496,6 +629,9 @@ def download_status(job_id: int) -> Response:
 @app.route("/debug/logs")
 def debug_logs() -> str:
     """Debug route to check log file status."""
+    if os.getenv("SLURM_CI_ENABLE_DEBUG_ROUTES", "0") != "1":
+        abort(404)
+
     db = SessionLocal()
     jobs = db.query(Job).all()
     db.close()

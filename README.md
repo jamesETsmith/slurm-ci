@@ -168,3 +168,41 @@ slurm-ci git-watch stop-all
 slurm-ci git-watch status
 ```
 
+### `dashboard`
+
+The dashboard is a lightweight Flask/Jinja UI for monitoring builds and jobs.
+It is intentionally minimal and optimized for quick triage.
+
+**Usage:**
+
+```bash
+slurm-ci dashboard --host 127.0.0.1 --port 5001
+```
+
+**Key behaviors:**
+
+- `Builds` view is DB-backed (SQLite) and supports query filters:
+  - `status`
+  - `branch`
+  - `workflow`
+- `Logs` view is filesystem-backed (`$SLURM_CI_STATUS_DIR` or default status dir) and is labeled separately in the UI.
+- Tables support client-side sort/search/pagination through `simple-datatables`.
+- Summary cards and trend chart auto-refresh periodically via `htmx`.
+
+**Debug route safety:**
+
+The `/debug/logs` endpoint is disabled by default.
+Enable it only when needed:
+
+```bash
+SLURM_CI_ENABLE_DEBUG_ROUTES=1 slurm-ci dashboard
+```
+
+### `services`
+
+To run background services together (for example dashboard + DB sync watcher), use:
+
+```bash
+slurm-ci services up
+```
+

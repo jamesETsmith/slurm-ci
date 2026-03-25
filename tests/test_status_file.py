@@ -182,6 +182,14 @@ class TestStatusFileGitMethods:
 
             # Hash was called during init
             assert sf.data["git"]["commit"] == "local_hash_123"
+            local_calls = [
+                call
+                for call in mock.call_args_list
+                if call.args and call.args[0][:2] == ["git", "rev-parse"]
+            ]
+            assert local_calls
+            for call in local_calls:
+                assert call.kwargs.get("cwd") == str(tmp_path)
 
     def test_get_git_hash_remote(
         self, temp_workflow_file: Path, tmp_path: Path

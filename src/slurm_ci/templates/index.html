@@ -1,47 +1,112 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <h2>Recent Builds</h2>
-    <table class="centered-table">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Repository</th>
-                <th>Branch</th>
-                <th>Commit SHA</th>
-                <th>Workflow</th>
-                <th>Status</th>
-                <th>Jobs</th>
-                <th>Created At</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for build in builds %}
-            <tr>
-                <td>{{ build.id }}</td>
-                <td>{{ build.repo_full_name }}</td>
-                <td>{{ build.branch or '-' }}</td>
-                <td><code>{{ build.commit_sha[:7] }}</code></td>
-                <td>{{ build.workflow_file.split('/')[-1] if build.workflow_file else '-' }}</td>
-                <td><span class="status-{{ build.status }}">{{ build.status }}</span></td>
-                <td>
-                    {% set job_counts = build.jobs|groupby('status')|list %}
-                    {% for status, jobs in job_counts %}
-                        <span class="job-count status-{{ status }}">{{ jobs|length }} {{ status }}</span>
-                    {% endfor %}
-                    {% if not build.jobs %}
-                        <span class="job-count">0 jobs</span>
-                    {% endif %}
-                </td>
-                <td>{{ build.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                <td><a href="{{ url_for('build_detail', build_id=build.id) }}">View Details</a></td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="9">No builds found.</td>
-            </tr>
+<h2>Recent Builds</h2>
+<form id="build-filters" method="get" action="{{ url_for('index') }}" class="filters">
+    <label>
+        Status
+        <select name="status">
+            <option value="">All</option>
+            {% for status_option in filter_options.status %}
+            <option value="{{ status_option }}" {% if filters.status == status_option %}selected{% endif %}>
+                {{ status_option }}
+            </option>
             {% endfor %}
-        </tbody>
-    </table>
+        </select>
+    </label>
+    <label>
+        Branch
+        <select name="branch">
+            <option value="">All</option>
+            {% for branch_option in filter_options.branch %}
+            <option value="{{ branch_option }}" {% if filters.branch == branch_option %}selected{% endif %}>
+                {{ branch_option }}
+            </option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>
+        Workflow
+        <input type="text" name="workflow" value="{{ filters.workflow }}" placeholder="build.yml">
+    </label>
+    <button type="submit">Apply</button>
+    <a href="{{ url_for('index') }}">Reset</a>
+</form>
+
+<section
+    id="summary-container"
+    hx-get="{{ url_for('index_summary_partial') }}"
+    hx-trigger="every 20s"
+    hx-include="#build-filters"
+    hx-swap="innerHTML">
+    {% include "partials/index_summary.html" %}
+</section>
+
+<section
+    id="table-container"
+    hx-get="{{ url_for('index_table_partial') }}"
+    hx-trigger="every 20s"
+    hx-include="#build-filters"
+    hx-swap="innerHTML">
+    {% include "partials/index_table.html" %}
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    (function () {
+        let trendChart = null;
+
+        function renderTrendChart() {
+            const canvas = document.getElementById("build-duration-trend");
+            if (!canvas || !window.Chart) return;
+            const labels = JSON.parse(canvas.dataset.labels || "[]");
+            const values = JSON.parse(canvas.dataset.values || "[]");
+            const failedValues = JSON.parse(canvas.dataset.failedValues || "[]");
+
+            if (trendChart) {
+                trendChart.destroy();
+            }
+
+            trendChart = new Chart(canvas, {
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            type: "line",
+                            label: "Avg job duration (s)",
+                            data: values,
+                            borderColor: "#5c95c5",
+                            backgroundColor: "rgba(92,149,197,0.15)",
+                            yAxisID: "y"
+                        },
+                        {
+                            type: "bar",
+                            label: "Failed jobs",
+                            data: failedValues,
+                            backgroundColor: "rgba(220,53,69,0.25)",
+                            borderColor: "#dc3545",
+                            yAxisID: "y1"
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { position: "bottom" } },
+                    scales: {
+                        y: { beginAtZero: true, title: { display: true, text: "Seconds" } },
+                        y1: { beginAtZero: true, position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "Failures" } }
+                    }
+                }
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", renderTrendChart);
+        document.body.addEventListener("htmx:afterSwap", function (event) {
+            if (event.target && event.target.id === "summary-container") {
+                renderTrendChart();
+            }
+        });
+    })();
+</script>
 {% endblock %}

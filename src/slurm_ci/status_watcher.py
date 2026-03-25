@@ -80,7 +80,15 @@ class StatusWatcher:
         ci = status_data.get("ci", {})
 
         has_end_time = "end" in runtime
-        exit_code = runtime.get("end", {}).get("exit_code")
+        runtime_exit_code = runtime.get("end", {}).get("exit_code")
+
+        # Runtime data comes directly from the executed script and should be
+        # treated as authoritative for terminal states when present.
+        if has_end_time:
+            status = "completed" if runtime_exit_code == 0 else "failed"
+        else:
+            status = "running" if "start_time" in runtime else "pending"
+        exit_code = runtime_exit_code
 
         # Update status file with sacct data if available
         if sacct_info:
@@ -100,7 +108,7 @@ class StatusWatcher:
             except Exception as e:
                 print(f"Warning: Could not update status file with sacct data: {e}")
 
-            # Use sacct data to determine status if available
+            # Use sacct data to refine status when available.
             if slurm_state:
                 # Map SLURM states to our status
                 if slurm_state in ["COMPLETED"]:
@@ -112,36 +120,18 @@ class StatusWatcher:
                     if sacct_exit_code is not None:
                         exit_code = sacct_exit_code
                 elif slurm_state in ["RUNNING"]:
-                    status = "running"
+                    # Do not overwrite a terminal runtime state with a transient
+                    # non-terminal scheduler state.
+                    if not has_end_time:
+                        status = "running"
                 elif slurm_state in ["PENDING", "CONFIGURING"]:
-                    status = "pending"
+                    # Do not overwrite a terminal runtime state with a transient
+                    # non-terminal scheduler state.
+                    if not has_end_time:
+                        status = "pending"
                 else:
-                    # Unknown state, fall back to runtime info
-                    if has_end_time:
-                        if exit_code == 0:
-                            status = "completed"
-                        else:
-                            status = "failed"
-                    else:
-                        status = "running" if "start_time" in runtime else "pending"
-            else:
-                # No sacct data, use runtime info
-                if has_end_time:
-                    if exit_code == 0:
-                        status = "completed"
-                    else:
-                        status = "failed"
-                else:
-                    status = "running" if "start_time" in runtime else "pending"
-        else:
-            # No sacct data, use runtime info
-            if has_end_time:
-                if exit_code == 0:
-                    status = "completed"
-                else:
-                    status = "failed"
-            else:
-                status = "running" if "start_time" in runtime else "pending"
+                    # Unknown scheduler state: keep runtime-derived status.
+                    pass
 
         # Extract timing information
         start_time = runtime.get("start_time")
