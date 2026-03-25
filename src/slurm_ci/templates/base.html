@@ -5,18 +5,102 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Slurm CI Dashboard</title>
-    <link rel="stylesheet" href="https://cdn.simplecss.org/simple.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/simple-datatables@9.1.0/dist/style.min.css">
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.12"></script>
     <script src="https://cdn.jsdelivr.net/npm/simple-datatables@9.1.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <style>
-        /* --- Layout containment --- */
+        /* ============================================================
+           GitHub Actions Dark Theme (Primer dark palette)
+           ============================================================ */
+        :root {
+            --gh-bg-canvas:    #0d1117;
+            --gh-bg-default:   #161b22;
+            --gh-bg-subtle:    #21262d;
+            --gh-bg-inset:     #010409;
+            --gh-border:       #30363d;
+            --gh-border-muted: #21262d;
+            --gh-fg-default:   #c9d1d9;
+            --gh-fg-muted:     #8b949e;
+            --gh-fg-emphasis:  #f0f6fc;
+            --gh-accent:       #58a6ff;
+            --gh-accent-hover: #79c0ff;
+            --gh-success:      #3fb950;
+            --gh-danger:       #f85149;
+            --gh-warning:      #d29922;
+            --gh-info:         #58a6ff;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--gh-fg-default);
+            background-color: var(--gh-bg-canvas);
+        }
+
+        a { color: var(--gh-accent); text-decoration: none; }
+        a:hover { color: var(--gh-accent-hover); text-decoration: underline; }
+
+        h1, h2, h3 {
+            color: var(--gh-fg-emphasis);
+            font-weight: 600;
+            margin-top: 0;
+        }
+        h1 { font-size: 1.4rem; }
+        h2 { font-size: 1.15rem; border-bottom: 1px solid var(--gh-border); padding-bottom: 0.4rem; }
+        h3 { font-size: 1rem; }
+
+        p { margin: 0.4rem 0; }
+        small { color: var(--gh-fg-muted); }
+
+        /* --- Page shell --- */
+        header {
+            background-color: var(--gh-bg-default);
+            border-bottom: 1px solid var(--gh-border);
+            padding: 0.6rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+        }
+        header nav { display: flex; gap: 1rem; }
+        header nav a {
+            color: var(--gh-fg-default);
+            font-weight: 500;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+        }
+        header nav a:hover {
+            background-color: var(--gh-bg-subtle);
+            text-decoration: none;
+        }
+
         main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1.25rem 1.5rem;
             max-width: 100%;
             overflow-x: hidden;
         }
 
+        footer {
+            border-top: 1px solid var(--gh-border);
+            padding: 1rem 1.5rem;
+            text-align: center;
+            color: var(--gh-fg-muted);
+            font-size: 0.8rem;
+        }
+
+        /* --- Tables --- */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -26,16 +110,27 @@
         th, td {
             padding: 0.5rem 0.6rem;
             text-align: left;
-            border-bottom: 1px solid #dee2e6;
+            border-bottom: 1px solid var(--gh-border-muted);
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+
+        th {
+            color: var(--gh-fg-muted);
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        tr:hover td {
+            background-color: var(--gh-bg-default);
         }
 
         .centered-table {
             margin: 0 auto;
             width: 100%;
             max-width: 100%;
-            box-sizing: border-box;
         }
 
         .dataTable-wrapper {
@@ -50,24 +145,42 @@
             overflow-x: auto;
             width: 100%;
             max-width: 100%;
-            box-sizing: border-box;
         }
 
         .dataTable-top,
         .dataTable-bottom {
             width: 100%;
             max-width: 100%;
-            box-sizing: border-box;
+            color: var(--gh-fg-muted);
+        }
+
+        .dataTable-top select,
+        .dataTable-top input,
+        .dataTable-bottom select {
+            background-color: var(--gh-bg-default);
+            color: var(--gh-fg-default);
+            border: 1px solid var(--gh-border);
+            border-radius: 6px;
+            padding: 0.3rem 0.5rem;
         }
 
         .dataTable-table {
             width: 100%;
             max-width: 100%;
-            box-sizing: border-box;
             table-layout: fixed;
         }
 
-        /* --- Status dots (GitHub Actions style) --- */
+        .dataTable-pagination li a,
+        .dataTable-pagination li button {
+            color: var(--gh-accent);
+        }
+        .dataTable-pagination li.active a {
+            background-color: var(--gh-accent);
+            color: var(--gh-bg-canvas);
+            border-radius: 6px;
+        }
+
+        /* --- Status dots --- */
         .status-dot {
             display: inline-block;
             width: 10px;
@@ -76,44 +189,47 @@
             margin-right: 6px;
             flex-shrink: 0;
         }
-        .status-dot.completed, .status-dot.success { background-color: #28a745; }
-        .status-dot.failed, .status-dot.error      { background-color: #dc3545; }
-        .status-dot.running                         { background-color: #007bff; }
-        .status-dot.pending                         { background-color: #ffc107; }
+        .status-dot.completed, .status-dot.success { background-color: var(--gh-success); }
+        .status-dot.failed, .status-dot.error      { background-color: var(--gh-danger); }
+        .status-dot.running                         { background-color: var(--gh-info); }
+        .status-dot.pending                         { background-color: var(--gh-warning); }
 
-        .status-completed, .status-success { color: #28a745; font-weight: bold; }
-        .status-failed, .status-error      { color: #dc3545; font-weight: bold; }
-        .status-running                    { color: #007bff; font-weight: bold; }
-        .status-pending                    { color: #ffc107; font-weight: bold; }
+        .status-completed, .status-success { color: var(--gh-success); font-weight: 600; }
+        .status-failed, .status-error      { color: var(--gh-danger);  font-weight: 600; }
+        .status-running                    { color: var(--gh-info);    font-weight: 600; }
+        .status-pending                    { color: var(--gh-warning); font-weight: 600; }
 
         /* --- Compact cell helpers --- */
         .cell-main {
             font-weight: 600;
             display: flex;
             align-items: center;
+            color: var(--gh-fg-emphasis);
         }
 
         .cell-sub {
             font-size: 0.82em;
-            color: #6c757d;
+            color: var(--gh-fg-muted);
             margin-top: 1px;
         }
 
         .cell-sub code {
             font-size: 0.95em;
-            background: #f0f0f0;
-            padding: 0 3px;
+            background: var(--gh-bg-subtle);
+            color: var(--gh-fg-default);
+            padding: 0 4px;
             border-radius: 3px;
         }
 
         .matrix-tag {
             display: inline-block;
-            padding: 1px 5px;
+            padding: 1px 6px;
             margin: 1px 2px;
-            border-radius: 3px;
+            border-radius: 12px;
             font-size: 0.78em;
-            background-color: #e9ecef;
-            border: 1px solid #dee2e6;
+            background-color: var(--gh-bg-subtle);
+            border: 1px solid var(--gh-border);
+            color: var(--gh-fg-default);
             white-space: nowrap;
         }
 
@@ -121,61 +237,81 @@
             display: inline-block;
             padding: 2px 6px;
             margin: 1px;
-            border-radius: 3px;
-            font-size: 0.85em;
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
+            border-radius: 12px;
+            font-size: 0.82em;
+            background-color: var(--gh-bg-subtle);
+            border: 1px solid var(--gh-border);
         }
 
         /* --- Build info --- */
         .build-info {
-            background-color: #f8f9fa;
+            background-color: var(--gh-bg-default);
+            border: 1px solid var(--gh-border);
             padding: 1rem;
-            border-radius: 0.375rem;
-            margin-bottom: 2rem;
+            border-radius: 6px;
+            margin-bottom: 1.5rem;
         }
+        .build-info strong { color: var(--gh-fg-muted); }
 
         /* --- Code --- */
         code {
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            font-size: 0.9em;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.88em;
+        }
+
+        pre {
+            background-color: var(--gh-bg-default);
+            border: 1px solid var(--gh-border);
+            border-radius: 6px;
+            padding: 0.75rem;
+            overflow-x: auto;
+            color: var(--gh-fg-default);
         }
 
         /* --- Details/summary --- */
         details summary {
             cursor: pointer;
-            font-weight: bold;
+            font-weight: 600;
+            color: var(--gh-accent);
         }
-        details[open] summary {
-            margin-bottom: 0.5rem;
-        }
+        details[open] summary { margin-bottom: 0.5rem; }
 
         /* --- Buttons --- */
         .btn {
             display: inline-block;
-            padding: 0.2rem 0.45rem;
+            padding: 0.25rem 0.6rem;
             font-size: 0.8rem;
-            font-weight: 400;
+            font-weight: 500;
             line-height: 1.4;
             text-align: center;
             text-decoration: none;
             vertical-align: middle;
             cursor: pointer;
-            border: 1px solid transparent;
-            border-radius: 0.25rem;
-            color: #fff;
-            background-color: #5c95c5;
-            border-color: #5c95c5;
+            border: 1px solid var(--gh-border);
+            border-radius: 6px;
+            color: var(--gh-fg-default);
+            background-color: var(--gh-bg-subtle);
             white-space: nowrap;
         }
         .btn:hover {
-            background-color: #4a7aa4;
-            border-color: #4a7aa4;
+            background-color: var(--gh-border);
+            text-decoration: none;
+            color: var(--gh-fg-emphasis);
         }
 
         .btn-sm {
-            padding: 0.15rem 0.35rem;
+            padding: 0.15rem 0.4rem;
             font-size: 0.75rem;
+        }
+
+        .btn-primary {
+            background-color: #238636;
+            border-color: rgba(240,246,252,0.1);
+            color: #fff;
+        }
+        .btn-primary:hover {
+            background-color: #2ea043;
+            color: #fff;
         }
 
         [title] {
@@ -194,11 +330,11 @@
             cursor: pointer;
             padding: 0;
             margin-left: 6px;
-            color: #5c95c5;
+            color: var(--gh-fg-muted);
             display: inline-flex;
             align-items: center;
         }
-        .copy-btn:hover { color: #4a7aa4; }
+        .copy-btn:hover { color: var(--gh-accent); }
 
         /* --- Meta / filters / summary --- */
         .meta-row {
@@ -212,11 +348,11 @@
         .source-pill {
             display: inline-block;
             padding: 0.2rem 0.55rem;
-            border-radius: 999px;
-            font-size: 0.8rem;
-            border: 1px solid #dee2e6;
-            background-color: #f8f9fa;
-            color: #495057;
+            border-radius: 12px;
+            font-size: 0.78rem;
+            border: 1px solid var(--gh-border);
+            background-color: var(--gh-bg-subtle);
+            color: var(--gh-fg-muted);
         }
 
         .filters {
@@ -229,7 +365,28 @@
         .filters label {
             display: grid;
             gap: 0.2rem;
+            color: var(--gh-fg-muted);
+            font-size: 0.82rem;
         }
+        .filters select,
+        .filters input[type="text"] {
+            background-color: var(--gh-bg-default);
+            color: var(--gh-fg-default);
+            border: 1px solid var(--gh-border);
+            border-radius: 6px;
+            padding: 0.35rem 0.5rem;
+            font-size: 0.85rem;
+        }
+        .filters button {
+            background-color: var(--gh-bg-subtle);
+            color: var(--gh-fg-default);
+            border: 1px solid var(--gh-border);
+            border-radius: 6px;
+            padding: 0.35rem 0.7rem;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .filters button:hover { background-color: var(--gh-border); }
 
         .summary-grid {
             display: grid;
@@ -238,19 +395,20 @@
             margin-bottom: 1rem;
         }
         .summary-card {
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
+            border: 1px solid var(--gh-border);
+            border-radius: 6px;
             padding: 0.7rem 0.8rem;
-            background: #fff;
+            background: var(--gh-bg-default);
         }
         .summary-label {
-            font-size: 0.8rem;
-            color: #6c757d;
+            font-size: 0.78rem;
+            color: var(--gh-fg-muted);
             margin-bottom: 0.2rem;
         }
         .summary-value {
             font-size: 1.1rem;
             font-weight: 600;
+            color: var(--gh-fg-emphasis);
         }
     </style>
 </head>
@@ -259,8 +417,8 @@
     <header>
         <h1>
             <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo"
-                style="height: 1em; vertical-align: middle; margin-right: 0.5em;">
-            Slurm CI Dashboard
+                style="height: 1.2em; vertical-align: middle; margin-right: 0.5em;">
+            Slurm CI
         </h1>
         <nav>
             <a href="{{ url_for('index') }}">Builds</a>
@@ -270,7 +428,7 @@
     <main>
         {% if data_source %}
         <div class="meta-row">
-            <span class="source-pill">Data source: {{ data_source }}</span>
+            <span class="source-pill">{{ data_source }}</span>
         </div>
         {% endif %}
         {% block content %}{% endblock %}

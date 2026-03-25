@@ -68,6 +68,9 @@
                 trendChart.destroy();
             }
 
+            Chart.defaults.color = "#8b949e";
+            Chart.defaults.borderColor = "#30363d";
+
             trendChart = new Chart(canvas, {
                 data: {
                     labels: labels,
@@ -76,16 +79,16 @@
                             type: "line",
                             label: "Avg job duration (s)",
                             data: values,
-                            borderColor: "#5c95c5",
-                            backgroundColor: "rgba(92,149,197,0.15)",
+                            borderColor: "#58a6ff",
+                            backgroundColor: "rgba(88,166,255,0.1)",
                             yAxisID: "y"
                         },
                         {
                             type: "bar",
                             label: "Failed jobs",
                             data: failedValues,
-                            backgroundColor: "rgba(220,53,69,0.25)",
-                            borderColor: "#dc3545",
+                            backgroundColor: "rgba(248,81,73,0.25)",
+                            borderColor: "#f85149",
                             yAxisID: "y1"
                         }
                     ]
@@ -94,10 +97,10 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: { duration: 0 },
-                    plugins: { legend: { position: "bottom" } },
+                    plugins: { legend: { position: "bottom", labels: { color: "#8b949e" } } },
                     scales: {
-                        y: { beginAtZero: true, title: { display: true, text: "Seconds" } },
-                        y1: { beginAtZero: true, position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "Failures" } }
+                        y: { beginAtZero: true, ticks: { color: "#8b949e" }, grid: { color: "#21262d" }, title: { display: true, text: "Seconds", color: "#8b949e" } },
+                        y1: { beginAtZero: true, position: "right", ticks: { color: "#8b949e" }, grid: { drawOnChartArea: false, color: "#21262d" }, title: { display: true, text: "Failures", color: "#8b949e" } }
                     }
                 }
             });

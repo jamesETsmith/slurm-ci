@@ -281,6 +281,7 @@ def git_watch_create_config(args: argparse.Namespace) -> None:
 def _is_port_available(host: str, port: int) -> bool:
     """Return whether a TCP host/port pair can be bound."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind((host, port))
         except OSError:
