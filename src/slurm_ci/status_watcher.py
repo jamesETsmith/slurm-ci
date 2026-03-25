@@ -282,18 +282,21 @@ class StatusWatcher:
         else:
             build.status = "running"
 
-    def reap_incomplete_jobs(self) -> int:
+    def reap_incomplete_jobs(self, stale_threshold_s: float = 3600) -> int:
         """Mark running/pending jobs as incomplete when their Slurm job is gone.
 
-        Scans DB for jobs in non-terminal states, reads the TOML status file
-        to get the Slurm job ID, then checks sacct. If the scheduler says the
-        job is no longer active *and* the TOML still has no runtime.end, the
-        job is marked ``incomplete``.
+        For jobs with a Slurm job ID: checks sacct and marks incomplete if the
+        scheduler says the job is no longer active.
+
+        For jobs *without* a Slurm job ID (local runs, test runs): marks
+        incomplete if they have been in a non-terminal state longer than
+        ``stale_threshold_s`` seconds (default 1 hour) with no runtime.end.
 
         Returns the number of jobs reaped.
         """
         session = SessionLocal()
         reaped = 0
+        now_ts = time.time()
         try:
             stale_jobs = (
                 session.query(Job).filter(Job.status.in_(["running", "pending"])).all()
@@ -312,21 +315,31 @@ class StatusWatcher:
                     continue
 
                 slurm_job_id = status_data.get("slurm", {}).get("job_id")
-                if slurm_job_id is None or slurm_job_id <= 0:
-                    continue
 
-                active = is_slurm_job_active(slurm_job_id)
-                if active is None:
-                    continue
-                if active:
-                    continue
+                if slurm_job_id is not None and slurm_job_id > 0:
+                    active = is_slurm_job_active(slurm_job_id)
+                    if active is None or active:
+                        continue
+                    job.status = "incomplete"
+                    logger.info(
+                        "Reaped job %s (slurm %s): marked incomplete",
+                        job.name,
+                        slurm_job_id,
+                    )
+                else:
+                    start_time = runtime.get("start_time")
+                    if start_time is None:
+                        continue
+                    elapsed = now_ts - float(start_time)
+                    if elapsed < stale_threshold_s:
+                        continue
+                    job.status = "incomplete"
+                    logger.info(
+                        "Reaped job %s (no slurm id, stale %.0fs): marked incomplete",
+                        job.name,
+                        elapsed,
+                    )
 
-                job.status = "incomplete"
-                logger.info(
-                    "Reaped job %s (slurm %s): marked incomplete",
-                    job.name,
-                    slurm_job_id,
-                )
                 reaped += 1
 
             if reaped:
