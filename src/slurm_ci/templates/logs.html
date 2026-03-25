@@ -50,10 +50,11 @@
                 <div class="cell-main">
                     <span class="status-dot {{ entry.status }}" title="{{ entry.status }}"></span>
                     {{ entry.project_name }}
-                    <span class="cell-sub" style="margin-left:6px">{{ entry.workflow_file | basename }}</span>
                 </div>
+                <div class="cell-sub">{{ entry.workflow_file | basename }}</div>
+                <div class="cell-sub">{{ entry.git_branch }}</div>
                 <div class="cell-sub">
-                    {{ entry.git_branch }} &middot; <code>{{ entry.git_commit }}</code>
+                    <code>{{ entry.git_commit }}</code>
                     {% if entry.exit_code is not none %}
                     &middot;
                     {% if entry.exit_code == 0 %}

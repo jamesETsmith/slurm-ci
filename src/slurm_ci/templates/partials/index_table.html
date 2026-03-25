@@ -14,13 +14,12 @@
                 <div class="cell-main">
                     <span class="status-dot {{ build.status }}" title="{{ build.status }}"></span>
                     {{ build.repo_full_name }}
-                    {% if build.workflow_file %}
-                    <span class="cell-sub" style="margin-left:6px">{{ build.workflow_file.split('/')[-1] }}</span>
-                    {% endif %}
                 </div>
-                <div class="cell-sub">
-                    {{ build.branch or '-' }} &middot; <code>{{ build.commit_sha[:7] }}</code> &middot; #{{ build.id }}
-                </div>
+                {% if build.workflow_file %}
+                <div class="cell-sub">{{ build.workflow_file.split('/')[-1] }}</div>
+                {% endif %}
+                <div class="cell-sub">{{ build.branch or '-' }}</div>
+                <div class="cell-sub"><code>{{ build.commit_sha[:7] }}</code> &middot; #{{ build.id }}</div>
             </td>
             <td>
                 {% set job_counts = build.jobs|groupby('status')|list %}
