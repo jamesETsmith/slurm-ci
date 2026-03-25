@@ -65,6 +65,7 @@ def _load_builds_context() -> dict:
     status = request.args.get("status", "").strip().lower()
     branch = request.args.get("branch", "").strip()
     workflow = request.args.get("workflow", "").strip()
+    project = request.args.get("project", "").strip()
 
     db = SessionLocal()
     query = (
@@ -79,6 +80,8 @@ def _load_builds_context() -> dict:
         query = query.filter(Build.branch == branch)
     if workflow:
         query = query.filter(Build.workflow_file.ilike(f"%{workflow}%"))
+    if project:
+        query = query.filter(Build.repo_full_name == project)
 
     builds = query.all()
     db.close()
@@ -118,6 +121,9 @@ def _load_builds_context() -> dict:
     all_builds = db.query(Build).order_by(Build.created_at.desc()).all()
     db.close()
 
+    project_options = sorted(
+        {str(b.repo_full_name) for b in all_builds if b.repo_full_name}
+    )
     branch_options = sorted({b.branch for b in all_builds if b.branch})
     workflow_options = sorted(
         {
@@ -140,9 +146,11 @@ def _load_builds_context() -> dict:
             "status": status,
             "branch": branch,
             "workflow": workflow,
+            "project": project,
         },
         "filter_options": {
             "status": status_options,
+            "project": project_options,
             "branch": branch_options,
             "workflow": workflow_options,
         },
@@ -174,6 +182,7 @@ def all_logs() -> str:
     status_filter = request.args.get("status", "").strip().lower()
     branch_filter = request.args.get("branch", "").strip()
     workflow_filter = request.args.get("workflow", "").strip()
+    project_filter = request.args.get("project", "").strip()
     status_dir = Path(STATUS_DIR)
     log_entries = []
 
@@ -220,12 +229,17 @@ def all_logs() -> str:
                 and workflow_filter.lower() not in entry["workflow_file"].lower()
             ):
                 continue
+            if project_filter and entry["project_name"] != project_filter:
+                continue
             log_entries.append(entry)
         except Exception as e:
             # If we can't parse a file, skip it
             print(f"Error parsing {toml_file}: {e}")
             continue
 
+    project_options = sorted(
+        {entry["project_name"] for entry in log_entries if entry["project_name"]}
+    )
     branch_options = sorted(
         {entry["git_branch"] for entry in log_entries if entry["git_branch"]}
     )
@@ -244,9 +258,11 @@ def all_logs() -> str:
             "status": status_filter,
             "branch": branch_filter,
             "workflow": workflow_filter,
+            "project": project_filter,
         },
         filter_options={
             "status": ["pending", "running", "completed", "failed", "incomplete"],
+            "project": project_options,
             "branch": branch_options,
             "workflow": workflow_options,
         },

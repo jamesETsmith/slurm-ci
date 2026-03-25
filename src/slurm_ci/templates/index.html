@@ -4,6 +4,17 @@
 <h2>Recent Builds</h2>
 <form id="build-filters" method="get" action="{{ url_for('index') }}" class="filters">
     <label>
+        Project
+        <select name="project">
+            <option value="">All</option>
+            {% for project_option in filter_options.project %}
+            <option value="{{ project_option }}" {% if filters.project == project_option %}selected{% endif %}>
+                {{ project_option }}
+            </option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>
         Status
         <select name="status">
             <option value="">All</option>
