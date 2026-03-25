@@ -19,6 +19,10 @@
         <div class="summary-label">Pending</div>
         <div class="summary-value status-pending">{{ summary.status_counts.pending }}</div>
     </div>
+    <div class="summary-card">
+        <div class="summary-label">Incomplete</div>
+        <div class="summary-value status-incomplete">{{ summary.status_counts.incomplete }}</div>
+    </div>
 </div>
 
 {% if summary.last_update %}

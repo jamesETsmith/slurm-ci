@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from datetime import datetime
 from pathlib import Path
@@ -9,7 +10,10 @@ from sqlalchemy.orm import Session
 
 from .config import STATUS_DIR
 from .database import Build, Job, SessionLocal
-from .slurm_utils import get_job_info_from_sacct
+from .slurm_utils import get_job_info_from_sacct, is_slurm_job_active
+
+
+logger = logging.getLogger(__name__)
 
 
 class StatusWatcher:
@@ -262,19 +266,85 @@ class StatusWatcher:
 
     def update_build_status(self, session: Session, build: Build) -> None:
         """Update build status based on its jobs."""
+        terminal = {"completed", "failed", "incomplete"}
         jobs = session.query(Job).filter(Job.build_id == build.id).all()
 
         if not jobs:
             build.status = "pending"
-        elif all(job.status in ["completed", "failed"] for job in jobs):
-            # All jobs finished
-            if all(job.status == "completed" for job in jobs):
+        elif all(job.status in terminal for job in jobs):
+            statuses = {job.status for job in jobs}
+            if statuses == {"completed"}:
                 build.status = "completed"
-            else:
+            elif "failed" in statuses:
                 build.status = "failed"
+            else:
+                build.status = "incomplete"
         else:
-            # Some jobs still running
             build.status = "running"
+
+    def reap_incomplete_jobs(self) -> int:
+        """Mark running/pending jobs as incomplete when their Slurm job is gone.
+
+        Scans DB for jobs in non-terminal states, reads the TOML status file
+        to get the Slurm job ID, then checks sacct. If the scheduler says the
+        job is no longer active *and* the TOML still has no runtime.end, the
+        job is marked ``incomplete``.
+
+        Returns the number of jobs reaped.
+        """
+        session = SessionLocal()
+        reaped = 0
+        try:
+            stale_jobs = (
+                session.query(Job).filter(Job.status.in_(["running", "pending"])).all()
+            )
+
+            for job in stale_jobs:
+                if not job.status_file_path:
+                    continue
+
+                status_data = self.read_status_file(Path(str(job.status_file_path)))
+                if status_data is None:
+                    continue
+
+                runtime = status_data.get("runtime", {})
+                if "end" in runtime:
+                    continue
+
+                slurm_job_id = status_data.get("slurm", {}).get("job_id")
+                if slurm_job_id is None or slurm_job_id <= 0:
+                    continue
+
+                active = is_slurm_job_active(slurm_job_id)
+                if active is None:
+                    continue
+                if active:
+                    continue
+
+                job.status = "incomplete"
+                logger.info(
+                    "Reaped job %s (slurm %s): marked incomplete",
+                    job.name,
+                    slurm_job_id,
+                )
+                reaped += 1
+
+            if reaped:
+                build_ids = {j.build_id for j in stale_jobs if j.status == "incomplete"}
+                for build_id in build_ids:
+                    build = session.query(Build).filter(Build.id == build_id).first()
+                    if build:
+                        self.update_build_status(session, build)
+
+                session.commit()
+                logger.info("Reaped %d incomplete job(s)", reaped)
+        except Exception as e:
+            logger.error("Error during incomplete-job reap: %s", e)
+            session.rollback()
+        finally:
+            session.close()
+
+        return reaped
 
     def sync_all_files(self) -> int:
         """Sync all status files to the database."""
@@ -290,14 +360,25 @@ class StatusWatcher:
         return synced_count
 
     def watch_directory(
-        self, poll_interval: int = 30, sync_on_start: bool = True
+        self,
+        poll_interval: int = 30,
+        sync_on_start: bool = True,
+        reap_interval: int = 120,
     ) -> None:
-        """Watch the status directory for changes and sync to database."""
+        """Watch the status directory for changes and sync to database.
+
+        Args:
+            poll_interval: Seconds between file-change polls.
+            sync_on_start: Run a full sync before entering the loop.
+            reap_interval: Seconds between incomplete-job reap passes.
+        """
         print(f"Watching status directory: {self.status_dir}")
 
         if sync_on_start:
             print("Performing initial sync...")
             self.sync_all_files()
+
+        last_reap_time = time.monotonic()
 
         try:
             while True:
@@ -314,7 +395,6 @@ class StatusWatcher:
                     ):
                         updated_files.append(file_path)
 
-                # Process updated files
                 for file_path in updated_files:
                     if self.sync_file_to_db(file_path):
                         self._processed_files[str(file_path)] = (
@@ -323,6 +403,11 @@ class StatusWatcher:
 
                 if updated_files:
                     print(f"Processed {len(updated_files)} updated files")
+
+                now = time.monotonic()
+                if now - last_reap_time >= reap_interval:
+                    self.reap_incomplete_jobs()
+                    last_reap_time = now
 
                 time.sleep(poll_interval)
 

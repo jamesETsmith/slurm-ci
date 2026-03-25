@@ -78,3 +78,18 @@ def get_job_info_from_sacct(job_id: int) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error querying sacct for job {job_id}: {e}")
         return None
+
+
+_ACTIVE_SLURM_STATES = {"PENDING", "RUNNING", "CONFIGURING", "COMPLETING", "SUSPENDED"}
+
+
+def is_slurm_job_active(job_id: int) -> Optional[bool]:
+    """Check whether a Slurm job is still active (queued/running).
+
+    Returns True if active, False if terminal/gone, or None if we cannot
+    determine (e.g. sacct unavailable).
+    """
+    info = get_job_info_from_sacct(job_id)
+    if info is None:
+        return None
+    return info.get("state", "") in _ACTIVE_SLURM_STATES

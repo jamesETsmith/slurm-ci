@@ -92,6 +92,137 @@ def test_update_build_status_transitions() -> None:
     watcher.update_build_status(session, build)
     assert build.status == "running"
 
+    filtered.all.return_value = [
+        Mock(status="completed"),
+        Mock(status="incomplete"),
+    ]
+    watcher.update_build_status(session, build)
+    assert build.status == "incomplete"
+
+    filtered.all.return_value = [
+        Mock(status="failed"),
+        Mock(status="incomplete"),
+    ]
+    watcher.update_build_status(session, build)
+    assert build.status == "failed"
+
+
+def test_reap_incomplete_jobs_marks_stale_jobs(tmp_path: Path) -> None:
+    """Jobs whose Slurm ID is no longer active get marked incomplete."""
+    engine = create_engine(f"sqlite:///{tmp_path / 'reap.db'}")
+    Base.metadata.create_all(bind=engine)
+    test_session_local = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    status_file = tmp_path / "running_job.toml"
+    toml_data = {
+        "project": {"name": "proj", "workflow_file": "ci.yml"},
+        "git": {"commit": "aaa", "branch": "main"},
+        "ci": {},
+        "matrix": {"py": "3.12"},
+        "runtime": {"start_time": 1000.0},
+        "slurm": {"job_id": 999},
+    }
+    with open(status_file, "w") as f:
+        toml.dump(toml_data, f)
+
+    session = test_session_local()
+    from slurm_ci.database import Build as BuildModel
+    from slurm_ci.database import Job as JobModel
+
+    build = BuildModel(
+        repo_full_name="proj",
+        commit_sha="aaa",
+        branch="main",
+        workflow_file="ci.yml",
+        status="running",
+    )
+    session.add(build)
+    session.commit()
+
+    job = JobModel(
+        build_id=build.id,
+        name="py:3.12",
+        status="running",
+        status_file_path=str(status_file),
+    )
+    session.add(job)
+    session.commit()
+    session.close()
+
+    watcher = StatusWatcher(str(tmp_path))
+
+    with (
+        patch("slurm_ci.status_watcher.SessionLocal", test_session_local),
+        patch("slurm_ci.status_watcher.is_slurm_job_active", return_value=False),
+    ):
+        reaped = watcher.reap_incomplete_jobs()
+
+    assert reaped == 1
+
+    session = test_session_local()
+    job = session.query(JobModel).first()
+    assert job.status == "incomplete"
+    build = session.query(BuildModel).first()
+    assert build.status == "incomplete"
+    session.close()
+
+
+def test_reap_skips_jobs_still_active(tmp_path: Path) -> None:
+    """Jobs whose Slurm ID is still active should not be reaped."""
+    engine = create_engine(f"sqlite:///{tmp_path / 'reap_active.db'}")
+    Base.metadata.create_all(bind=engine)
+    test_session_local = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    status_file = tmp_path / "active_job.toml"
+    toml_data = {
+        "project": {"name": "proj", "workflow_file": "ci.yml"},
+        "git": {"commit": "bbb", "branch": "main"},
+        "ci": {},
+        "matrix": {},
+        "runtime": {"start_time": 1000.0},
+        "slurm": {"job_id": 888},
+    }
+    with open(status_file, "w") as f:
+        toml.dump(toml_data, f)
+
+    session = test_session_local()
+    from slurm_ci.database import Build as BuildModel
+    from slurm_ci.database import Job as JobModel
+
+    build = BuildModel(
+        repo_full_name="proj",
+        commit_sha="bbb",
+        branch="main",
+        workflow_file="ci.yml",
+        status="running",
+    )
+    session.add(build)
+    session.commit()
+    job = JobModel(
+        build_id=build.id,
+        name="default",
+        status="running",
+        status_file_path=str(status_file),
+    )
+    session.add(job)
+    session.commit()
+    session.close()
+
+    watcher = StatusWatcher(str(tmp_path))
+
+    with (
+        patch("slurm_ci.status_watcher.SessionLocal", test_session_local),
+        patch("slurm_ci.status_watcher.is_slurm_job_active", return_value=True),
+    ):
+        reaped = watcher.reap_incomplete_jobs()
+
+    assert reaped == 0
+
+    session = test_session_local()
+    job = session.query(JobModel).first()
+    assert job.status == "running"
+    session.close()
+
 
 def test_extract_job_info_fuzz_runtime_terminal_not_overwritten(tmp_path: Path) -> None:
     """Fuzz runtime/sacct combinations to avoid terminal->running regressions."""

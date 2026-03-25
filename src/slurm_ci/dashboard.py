@@ -83,7 +83,13 @@ def _load_builds_context() -> dict:
     builds = query.all()
     db.close()
 
-    status_counts = {"pending": 0, "running": 0, "completed": 0, "failed": 0}
+    status_counts = {
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0,
+        "incomplete": 0,
+    }
     for build in builds:
         build_status = str(build.status)
         if build_status in status_counts:
@@ -120,7 +126,7 @@ def _load_builds_context() -> dict:
             if b.workflow_file and os.path.basename(str(b.workflow_file))
         }
     )
-    status_options = ["pending", "running", "completed", "failed"]
+    status_options = ["pending", "running", "completed", "failed", "incomplete"]
 
     return {
         "builds": builds,
@@ -240,7 +246,7 @@ def all_logs() -> str:
             "workflow": workflow_filter,
         },
         filter_options={
-            "status": ["pending", "running", "completed", "failed"],
+            "status": ["pending", "running", "completed", "failed", "incomplete"],
             "branch": branch_options,
             "workflow": workflow_options,
         },
