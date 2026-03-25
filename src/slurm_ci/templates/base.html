@@ -11,30 +11,112 @@
     <script src="https://cdn.jsdelivr.net/npm/simple-datatables@9.1.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <style>
-        /* Status indicators */
-        .status-completed,
-        .status-success {
-            color: #28a745;
-            font-weight: bold;
+        /* --- Layout containment --- */
+        main {
+            max-width: 100%;
+            overflow-x: hidden;
         }
 
-        .status-failed,
-        .status-error {
-            color: #dc3545;
-            font-weight: bold;
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
         }
 
-        .status-running {
-            color: #007bff;
-            font-weight: bold;
+        th, td {
+            padding: 0.5rem 0.6rem;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        .status-pending {
-            color: #ffc107;
-            font-weight: bold;
+        .centered-table {
+            margin: 0 auto;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
         }
 
-        /* Job count badges */
+        .dataTable-wrapper {
+            display: block;
+            width: 100%;
+            max-width: 100%;
+            overflow-x: auto;
+            box-sizing: border-box;
+        }
+
+        .dataTable-container {
+            overflow-x: auto;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+
+        .dataTable-top,
+        .dataTable-bottom {
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+
+        .dataTable-table {
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+            table-layout: fixed;
+        }
+
+        /* --- Status dots (GitHub Actions style) --- */
+        .status-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+            flex-shrink: 0;
+        }
+        .status-dot.completed, .status-dot.success { background-color: #28a745; }
+        .status-dot.failed, .status-dot.error      { background-color: #dc3545; }
+        .status-dot.running                         { background-color: #007bff; }
+        .status-dot.pending                         { background-color: #ffc107; }
+
+        .status-completed, .status-success { color: #28a745; font-weight: bold; }
+        .status-failed, .status-error      { color: #dc3545; font-weight: bold; }
+        .status-running                    { color: #007bff; font-weight: bold; }
+        .status-pending                    { color: #ffc107; font-weight: bold; }
+
+        /* --- Compact cell helpers --- */
+        .cell-main {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        }
+
+        .cell-sub {
+            font-size: 0.82em;
+            color: #6c757d;
+            margin-top: 1px;
+        }
+
+        .cell-sub code {
+            font-size: 0.95em;
+            background: #f0f0f0;
+            padding: 0 3px;
+            border-radius: 3px;
+        }
+
+        .matrix-tag {
+            display: inline-block;
+            padding: 1px 5px;
+            margin: 1px 2px;
+            border-radius: 3px;
+            font-size: 0.78em;
+            background-color: #e9ecef;
+            border: 1px solid #dee2e6;
+            white-space: nowrap;
+        }
+
         .job-count {
             display: inline-block;
             padding: 2px 6px;
@@ -45,7 +127,7 @@
             border: 1px solid #dee2e6;
         }
 
-        /* Build info styling */
+        /* --- Build info --- */
         .build-info {
             background-color: #f8f9fa;
             padding: 1rem;
@@ -53,72 +135,47 @@
             margin-bottom: 2rem;
         }
 
-        /* Table improvements */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th,
-        td {
-            padding: 0.75rem;
-            text-align: left;
-            border-bottom: 1px solid #dee2e6;
-        }
-
-        /* Code styling */
+        /* --- Code --- */
         code {
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
             font-size: 0.9em;
         }
 
-        /* Details/summary styling */
+        /* --- Details/summary --- */
         details summary {
             cursor: pointer;
             font-weight: bold;
         }
-
         details[open] summary {
             margin-bottom: 0.5rem;
         }
 
+        /* --- Buttons --- */
         .btn {
             display: inline-block;
-            padding: 0.25rem 0.5rem;
-            font-size: 0.875rem;
+            padding: 0.2rem 0.45rem;
+            font-size: 0.8rem;
             font-weight: 400;
-            line-height: 1.5;
+            line-height: 1.4;
             text-align: center;
             text-decoration: none;
             vertical-align: middle;
             cursor: pointer;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            user-select: none;
             border: 1px solid transparent;
             border-radius: 0.25rem;
             color: #fff;
             background-color: #5c95c5;
             border-color: #5c95c5;
+            white-space: nowrap;
         }
-
         .btn:hover {
             background-color: #4a7aa4;
             border-color: #4a7aa4;
         }
 
-        .sort-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 1em;
-            color: #5c95c5;
-        }
-
-        .sortable-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .btn-sm {
+            padding: 0.15rem 0.35rem;
+            font-size: 0.75rem;
         }
 
         [title] {
@@ -136,21 +193,14 @@
             border: none;
             cursor: pointer;
             padding: 0;
-            margin-left: 8px;
+            margin-left: 6px;
             color: #5c95c5;
             display: inline-flex;
             align-items: center;
         }
+        .copy-btn:hover { color: #4a7aa4; }
 
-        .copy-btn:hover {
-            color: #4a7aa4;
-        }
-
-        .centered-table {
-            margin: 0 auto;
-            width: 90%;
-        }
-
+        /* --- Meta / filters / summary --- */
         .meta-row {
             display: flex;
             align-items: center;
@@ -176,7 +226,6 @@
             align-items: end;
             margin: 0.75rem 0 1rem 0;
         }
-
         .filters label {
             display: grid;
             gap: 0.2rem;
@@ -188,20 +237,17 @@
             gap: 0.75rem;
             margin-bottom: 1rem;
         }
-
         .summary-card {
             border: 1px solid #dee2e6;
             border-radius: 8px;
             padding: 0.7rem 0.8rem;
             background: #fff;
         }
-
         .summary-label {
             font-size: 0.8rem;
             color: #6c757d;
             margin-bottom: 0.2rem;
         }
-
         .summary-value {
             font-size: 1.1rem;
             font-weight: 600;

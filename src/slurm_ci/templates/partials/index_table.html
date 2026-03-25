@@ -1,26 +1,27 @@
 <table id="builds-table" class="centered-table" data-datatable="true" data-per-page="25">
     <thead>
         <tr>
-            <th>ID</th>
-            <th>Repository</th>
-            <th>Branch</th>
-            <th>Commit SHA</th>
-            <th>Workflow</th>
-            <th>Status</th>
-            <th>Jobs</th>
-            <th>Created At</th>
-            <th>Actions</th>
+            <th style="width:45%">Build</th>
+            <th style="width:25%">Jobs</th>
+            <th style="width:15%">Created</th>
+            <th style="width:15%">Actions</th>
         </tr>
     </thead>
     <tbody>
         {% for build in builds %}
         <tr>
-            <td>{{ build.id }}</td>
-            <td>{{ build.repo_full_name }}</td>
-            <td>{{ build.branch or '-' }}</td>
-            <td><code>{{ build.commit_sha[:7] }}</code></td>
-            <td>{{ build.workflow_file.split('/')[-1] if build.workflow_file else '-' }}</td>
-            <td><span class="status-{{ build.status }}">{{ build.status }}</span></td>
+            <td>
+                <div class="cell-main">
+                    <span class="status-dot {{ build.status }}" title="{{ build.status }}"></span>
+                    {{ build.repo_full_name }}
+                    {% if build.workflow_file %}
+                    <span class="cell-sub" style="margin-left:6px">{{ build.workflow_file.split('/')[-1] }}</span>
+                    {% endif %}
+                </div>
+                <div class="cell-sub">
+                    {{ build.branch or '-' }} &middot; <code>{{ build.commit_sha[:7] }}</code> &middot; #{{ build.id }}
+                </div>
+            </td>
             <td>
                 {% set job_counts = build.jobs|groupby('status')|list %}
                 {% for status, jobs in job_counts %}
@@ -30,12 +31,16 @@
                 <span class="job-count">0 jobs</span>
                 {% endif %}
             </td>
-            <td>{{ build.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-            <td><a href="{{ url_for('build_detail', build_id=build.id) }}">View Details</a></td>
+            <td>
+                <span class="cell-sub">{{ build.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+            </td>
+            <td>
+                <a href="{{ url_for('build_detail', build_id=build.id) }}" class="btn btn-sm">Details</a>
+            </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="9">No builds found.</td>
+            <td colspan="4">No builds found.</td>
         </tr>
         {% endfor %}
     </tbody>

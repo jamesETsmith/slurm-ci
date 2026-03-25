@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <h2>Build #{{ build.id }} - {{ build.repo_full_name }}</h2>
+    <h2>
+        <span class="status-dot {{ build.status }}"></span>
+        Build #{{ build.id }} - {{ build.repo_full_name }}
+    </h2>
     <div class="build-info">
-        <p><strong>Commit:</strong> <pre><code>{{ build.commit_sha }}</code></pre></p>
+        <p><strong>Commit:</strong> <code>{{ build.commit_sha }}</code></p>
         {% if build.branch %}
         <p><strong>Branch:</strong> {{ build.branch }}</p>
         {% endif %}
@@ -21,39 +24,37 @@
     <table id="jobs-table" class="centered-table" data-datatable="true" data-per-page="50">
         <thead>
             <tr>
-                {% for key in matrix_arg_keys %}
-                    <th>{{ key|replace('_version', '') }}</th>
-                {% endfor %}
-                <th>Status</th>
-                <th>Duration</th>
-                <th>Log</th>
-                <th>Status File</th>
+                <th style="width:35%">Job</th>
+                <th style="width:12%">Duration</th>
+                <th style="width:28%">Log</th>
+                <th style="width:25%">Status File</th>
             </tr>
         </thead>
         <tbody>
             {% for job in build.jobs %}
             <tr>
-                {% for key in matrix_arg_keys %}
                 <td>
-                    {{ job.matrix_args_parsed.get(key, '-') }}
-                </td>
-                {% endfor %}
-                <td>
-                    <div class="status-container">
-                        <span class="status-{{ job.status }}"
+                    <div class="cell-main">
+                        <span class="status-dot {{ job.status }}"
                               {% if job.status == 'failed' and job.status_file_path %}
-                                  title="Relaunch this job:&#10;slurm-ci relaunch {{ job.status_file_path }}"
-                              {% endif %}>
-                            {{ job.status }}
-                        </span>
+                              title="Relaunch: slurm-ci relaunch {{ job.status_file_path }}"
+                              {% else %}
+                              title="{{ job.status }}"
+                              {% endif %}></span>
+                        {% for key in matrix_arg_keys %}
+                        <span class="matrix-tag">{{ key|replace('_version', '') }}={{ job.matrix_args_parsed.get(key, '-') }}</span>
+                        {% endfor %}
                         {% if job.status == 'failed' and job.status_file_path %}
-                            <button class="copy-btn" data-command="slurm-ci relaunch {{ job.status_file_path }}" title="Copy relaunch command">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
-                                    <path d="M4 1.5H3a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h1v-1z"/>
-                                    <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
-                                </svg>
-                            </button>
+                        <button class="copy-btn" data-command="slurm-ci relaunch {{ job.status_file_path }}" title="Copy relaunch command">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M4 1.5H3a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h1v-1z"/>
+                                <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                            </svg>
+                        </button>
                         {% endif %}
+                    </div>
+                    <div class="cell-sub">
+                        {{ job.name or '-' }}
                     </div>
                 </td>
                 <td>
@@ -67,20 +68,20 @@
                 </td>
                 <td>
                     {% if job.log_file_path %}
-                        <a href="{{ url_for('job_log', job_id=job.id) }}" class="btn" target="_blank">View Log</a>
-                        <a href="{{ url_for('download_log', job_id=job.id) }}" class="btn">Download Log</a>
+                        <a href="{{ url_for('job_log', job_id=job.id) }}" class="btn btn-sm" target="_blank">View</a>
+                        <a href="{{ url_for('download_log', job_id=job.id) }}" class="btn btn-sm">Download</a>
                     {% endif %}
                     {% if job.logs %}
                         <details class="log-details">
-                            <summary>Inline Logs</summary>
+                            <summary>Inline</summary>
                             <pre class="log-content"><code>{{ job.logs }}</code></pre>
                         </details>
                     {% endif %}
                 </td>
                 <td>
                     {% if job.status_file_path %}
-                        <a href="{{ url_for('job_status', job_id=job.id) }}" class="btn" target="_blank">View Status</a>
-                        <a href="{{ url_for('download_status', job_id=job.id) }}" class="btn">Download Status</a>
+                        <a href="{{ url_for('job_status', job_id=job.id) }}" class="btn btn-sm" target="_blank">View</a>
+                        <a href="{{ url_for('download_status', job_id=job.id) }}" class="btn btn-sm">Download</a>
                     {% else %}
                         -
                     {% endif %}
@@ -88,8 +89,7 @@
             </tr>
             {% else %}
             <tr>
-                {% set colspan = matrix_arg_keys|length + 4 %}
-                <td colspan="{{ colspan }}">No jobs found for this build.</td>
+                <td colspan="4">No jobs found for this build.</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -99,7 +99,7 @@
     <style>
         .log-content {
             max-height: 400px;
-            width: 100%;
+            max-width: 100%;
             overflow-y: auto;
             overflow-x: auto;
             background-color: #f8f9fa;
@@ -120,17 +120,13 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Add event listeners to all log details elements
             const logDetails = document.querySelectorAll('.log-details');
-            
             logDetails.forEach(function(details) {
                 details.addEventListener('toggle', function() {
                     if (details.open) {
-                        // Wait a bit for the details to fully open
                         setTimeout(function() {
                             const logContent = details.querySelector('.log-content');
                             if (logContent) {
-                                // Scroll to the bottom of the log content
                                 logContent.scrollTop = logContent.scrollHeight;
                             }
                         }, 50);
@@ -141,24 +137,21 @@
 
         document.addEventListener('DOMContentLoaded', function() {
             const copyButtons = document.querySelectorAll('.copy-btn');
-
             copyButtons.forEach(function(button) {
                 button.addEventListener('click', function() {
                     const command = this.getAttribute('data-command');
                     navigator.clipboard.writeText(command).then(function() {
                         const originalContent = button.innerHTML;
-                        const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check-lg" viewBox="0 0 16 16"><path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022Z"/></svg>`;
+                        const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022Z"/></svg>`;
                         button.innerHTML = checkIcon;
                         setTimeout(function() {
                             button.innerHTML = originalContent;
                         }, 2000);
                     }, function(err) {
                         console.error('Could not copy text: ', err);
-                        alert('Failed to copy command.');
                     });
                 });
             });
         });
-
     </script>
 {% endblock %}

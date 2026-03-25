@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>All Job Logs from .slurm-ci/job_status</h2>
+<h2>All Job Logs</h2>
 <p>Filesystem view of status files and logs (no deduplication).</p>
 <form id="log-filters" method="get" action="{{ url_for('all_logs') }}" class="filters">
     <label>
@@ -36,77 +36,65 @@
 <table id="logs-table" class="centered-table" data-datatable="true" data-per-page="25">
     <thead>
         <tr>
-            <th>Project</th>
-            <th>Workflow</th>
-            <th>Git Commit</th>
-            <th>Branch</th>
-            <th>Matrix Args</th>
-            <th>SLURM Job ID</th>
-            <th>Status</th>
-            <th>Exit Code</th>
-            <th>Started At</th>
-            <th>Ended At</th>
-            <th>Actions</th>
+            <th style="width:35%">Job</th>
+            <th style="width:20%">Matrix</th>
+            <th style="width:10%">Slurm ID</th>
+            <th style="width:15%">Duration</th>
+            <th style="width:20%">Links</th>
         </tr>
     </thead>
     <tbody>
         {% for entry in log_entries %}
         <tr>
-            <td>{{ entry.project_name }}</td>
-            <td>{{ entry.workflow_file | basename }}</td>
-            <td><code>{{ entry.git_commit }}</code></td>
-            <td>{{ entry.git_branch }}</td>
+            <td>
+                <div class="cell-main">
+                    <span class="status-dot {{ entry.status }}" title="{{ entry.status }}"></span>
+                    {{ entry.project_name }}
+                    <span class="cell-sub" style="margin-left:6px">{{ entry.workflow_file | basename }}</span>
+                </div>
+                <div class="cell-sub">
+                    {{ entry.git_branch }} &middot; <code>{{ entry.git_commit }}</code>
+                    {% if entry.exit_code is not none %}
+                    &middot;
+                    {% if entry.exit_code == 0 %}
+                    <span style="color:#28a745">exit 0</span>
+                    {% else %}
+                    <span style="color:#dc3545">exit {{ entry.exit_code }}</span>
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </td>
             <td>
                 {% if entry.matrix_args %}
-                <details>
-                    <summary>View</summary>
-                    <pre style="text-align: left; font-size: 0.85em;">{{ entry.matrix_args | tojson(indent=2) }}</pre>
-                </details>
+                {% for k, v in entry.matrix_args.items() %}
+                <span class="matrix-tag">{{ k }}={{ v }}</span>
+                {% endfor %}
                 {% else %}
                 -
                 {% endif %}
             </td>
             <td>{{ entry.slurm_job_id if entry.slurm_job_id else '-' }}</td>
-            <td><span class="status-{{ entry.status }}">{{ entry.status }}</span></td>
             <td>
-                {% if entry.exit_code is not none %}
-                {% if entry.exit_code == 0 %}
-                <span style="color: green;">✓ {{ entry.exit_code }}</span>
+                <span class="cell-sub">
+                {% if entry.start_time and entry.end_time %}
+                    {{ "%.0f"|format(entry.end_time - entry.start_time) }}s
+                {% elif entry.start_time %}
+                    {{ entry.start_time | int | timestamp_to_datetime }}
                 {% else %}
-                <span style="color: red;">✗ {{ entry.exit_code }}</span>
+                    -
                 {% endif %}
-                {% else %}
-                -
-                {% endif %}
-            </td>
-            <td>
-                {% if entry.start_time %}
-                {{ entry.start_time | int | timestamp_to_datetime }}
-                {% else %}
-                -
-                {% endif %}
-            </td>
-            <td>
-                {% if entry.end_time %}
-                {{ entry.end_time | int | timestamp_to_datetime }}
-                {% else %}
-                -
-                {% endif %}
+                </span>
             </td>
             <td>
                 {% if entry.log_file %}
-                <a href="{{ url_for('raw_log', filename=entry.log_file | basename) }}" target="_blank">View Log</a>
-                {% else %}
-                <span style="color: gray;">No log</span>
+                <a href="{{ url_for('raw_log', filename=entry.log_file | basename) }}" class="btn btn-sm" target="_blank">Log</a>
                 {% endif %}
-                <br>
-                <a href="{{ url_for('raw_status', filename=entry.status_file | basename) }}" target="_blank">View
-                    Status</a>
+                <a href="{{ url_for('raw_status', filename=entry.status_file | basename) }}" class="btn btn-sm" target="_blank">Status</a>
             </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="11">No logs found in .slurm-ci/job_status directory.</td>
+            <td colspan="5">No logs found in status directory.</td>
         </tr>
         {% endfor %}
     </tbody>
