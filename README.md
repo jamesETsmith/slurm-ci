@@ -1,6 +1,6 @@
 # slurm-ci
 
-[![](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/jamesETsmith/slurm-ci/blob/main/LICENSE)
 
 :construction: **This project is under active development and is not yet ready for production use.**
 :construction: **Not all tests are working yet.**
