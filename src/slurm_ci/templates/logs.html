@@ -102,6 +102,7 @@
                 <a href="{{ url_for('raw_log', filename=entry.log_file | basename) }}" class="btn btn-sm" target="_blank">Log</a>
                 {% endif %}
                 <a href="{{ url_for('raw_status', filename=entry.status_file | basename) }}" class="btn btn-sm" target="_blank">Status</a>
+                <button class="btn btn-sm rerun-btn" data-command="slurm-ci relaunch {{ entry.status_file }}" title="Copy rerun command to clipboard">Rerun</button>
             </td>
         </tr>
         {% else %}
@@ -111,4 +112,23 @@
         {% endfor %}
     </tbody>
 </table>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.body.addEventListener('click', function(e) {
+            const button = e.target.closest('.rerun-btn');
+            if (!button) return;
+            const command = button.getAttribute('data-command');
+            navigator.clipboard.writeText(command).then(function() {
+                const original = button.textContent;
+                button.textContent = 'Copied!';
+                setTimeout(function() { button.textContent = original; }, 2000);
+            }, function(err) {
+                console.error('Could not copy text: ', err);
+            });
+        });
+    });
+</script>
 {% endblock %}

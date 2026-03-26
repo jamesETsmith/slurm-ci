@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -94,6 +94,30 @@ class StatusWatcher:
             status = "running" if "start_time" in runtime else "pending"
         exit_code = runtime_exit_code
 
+        # When there is no runtime.end (the job script never finished
+        # writing), use any previously-persisted slurm state already in the
+        # TOML file as a fallback.  This prevents jobs from reverting to
+        # "running" when sacct data expires on subsequent syncs.
+        persisted_slurm_state = slurm_info.get("state")
+        persisted_sacct_exit = slurm_info.get("sacct_exit_code")
+        if not has_end_time and persisted_slurm_state:
+            if persisted_slurm_state in ["COMPLETED"]:
+                status = "completed"
+                if persisted_sacct_exit is not None:
+                    exit_code = persisted_sacct_exit
+            elif (
+                persisted_slurm_state
+                in [
+                    "FAILED",
+                    "TIMEOUT",
+                    "OUT_OF_MEMORY",
+                ]
+                or "CANCELLED" in persisted_slurm_state
+            ):
+                status = "failed"
+                if persisted_sacct_exit is not None:
+                    exit_code = persisted_sacct_exit
+
         # Update status file with sacct data if available
         if sacct_info:
             slurm_state = sacct_info.get("state")
@@ -148,11 +172,21 @@ class StatusWatcher:
             "matrix_args": json.dumps(matrix_args) if matrix_args else None,
             "log_file_path": ci.get("logfile_path"),
             "status_file_path": str(file_path),
-            "start_time": datetime.fromtimestamp(start_time) if start_time else None,
-            "end_time": datetime.fromtimestamp(end_time) if end_time else None,
-            "created_at": datetime.fromtimestamp(start_time)
+            "start_time": datetime.fromtimestamp(start_time, tz=timezone.utc).replace(
+                tzinfo=None
+            )
             if start_time
-            else datetime.now(),
+            else None,
+            "end_time": datetime.fromtimestamp(end_time, tz=timezone.utc).replace(
+                tzinfo=None
+            )
+            if end_time
+            else None,
+            "created_at": datetime.fromtimestamp(start_time, tz=timezone.utc).replace(
+                tzinfo=None
+            )
+            if start_time
+            else datetime.now(timezone.utc).replace(tzinfo=None),
             "logs": None,  # Will be populated from log file if available
             "file_path": str(file_path),
         }

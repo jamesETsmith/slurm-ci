@@ -26,7 +26,7 @@
 </div>
 
 {% if summary.last_update %}
-<p><small>Last update: {{ summary.last_update.strftime('%Y-%m-%d %H:%M:%S') }}</small></p>
+<p><small>Last update: {{ summary.last_update.strftime('%Y-%m-%d %H:%M:%S') }} UTC</small></p>
 {% else %}
 <p><small>No build data available.</small></p>
 {% endif %}

@@ -17,7 +17,7 @@
         <p><strong>Working Directory:</strong> <code>{{ build.working_directory }}</code></p>
         {% endif %}
         <p><strong>Status:</strong> <span class="status-{{ build.status }}">{{ build.status }}</span></p>
-        <p><strong>Created:</strong> {{ build.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+        <p><strong>Created:</strong> {{ build.created_at.strftime('%Y-%m-%d %H:%M:%S') }} UTC</p>
     </div>
 
     <h3>Jobs</h3>
@@ -35,22 +35,12 @@
             <tr>
                 <td>
                     <div class="cell-main">
-                        <span class="status-dot {{ job.status }}"
-                              {% if job.status == 'failed' and job.status_file_path %}
-                              title="Relaunch: slurm-ci relaunch {{ job.status_file_path }}"
-                              {% else %}
-                              title="{{ job.status }}"
-                              {% endif %}></span>
+                        <span class="status-dot {{ job.status }}" title="{{ job.status }}"></span>
                         {% for key in matrix_arg_keys %}
                         <span class="matrix-tag">{{ key|replace('_version', '') }}={{ job.matrix_args_parsed.get(key, '-') }}</span>
                         {% endfor %}
-                        {% if job.status == 'failed' and job.status_file_path %}
-                        <button class="copy-btn" data-command="slurm-ci relaunch {{ job.status_file_path }}" title="Copy relaunch command">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                                <path d="M4 1.5H3a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h1v-1z"/>
-                                <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
-                            </svg>
-                        </button>
+                        {% if job.status_file_path %}
+                        <button class="btn btn-sm rerun-btn" data-command="slurm-ci relaunch {{ job.status_file_path }}" title="Copy rerun command to clipboard">Rerun</button>
                         {% endif %}
                     </div>
                     <div class="cell-sub">
@@ -61,7 +51,7 @@
                     {% if job.start_time and job.end_time %}
                         {{ "%.1f"|format((job.end_time - job.start_time).total_seconds()) }}s
                     {% elif job.start_time %}
-                        Started {{ job.start_time.strftime('%H:%M:%S') }}
+                        Started {{ job.start_time.strftime('%H:%M:%S') }} UTC
                     {% else %}
                         -
                     {% endif %}
@@ -136,22 +126,16 @@
             });
         });
 
-        document.addEventListener('DOMContentLoaded', function() {
-            const copyButtons = document.querySelectorAll('.copy-btn');
-            copyButtons.forEach(function(button) {
-                button.addEventListener('click', function() {
-                    const command = this.getAttribute('data-command');
-                    navigator.clipboard.writeText(command).then(function() {
-                        const originalContent = button.innerHTML;
-                        const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022Z"/></svg>`;
-                        button.innerHTML = checkIcon;
-                        setTimeout(function() {
-                            button.innerHTML = originalContent;
-                        }, 2000);
-                    }, function(err) {
-                        console.error('Could not copy text: ', err);
-                    });
-                });
+        document.body.addEventListener('click', function(e) {
+            const button = e.target.closest('.rerun-btn');
+            if (!button) return;
+            const command = button.getAttribute('data-command');
+            navigator.clipboard.writeText(command).then(function() {
+                const original = button.textContent;
+                button.textContent = 'Copied!';
+                setTimeout(function() { button.textContent = original; }, 2000);
+            }, function(err) {
+                console.error('Could not copy text: ', err);
             });
         });
     </script>

@@ -32,12 +32,12 @@ def format_json_filter(json_string: str) -> str:
 
 
 def timestamp_to_datetime_filter(timestamp: float) -> str:
-    """Convert Unix timestamp to readable datetime string."""
-    from datetime import datetime
+    """Convert Unix timestamp to readable UTC datetime string."""
+    from datetime import datetime, timezone
 
     try:
-        dt = datetime.fromtimestamp(timestamp)
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
+        dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
     except (ValueError, TypeError, OSError):
         return str(timestamp)
 
