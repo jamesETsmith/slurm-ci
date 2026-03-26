@@ -24,10 +24,11 @@
     <table id="jobs-table" class="centered-table" data-datatable="true" data-per-page="50">
         <thead>
             <tr>
-                <th style="width:35%">Job</th>
-                <th style="width:12%">Duration</th>
-                <th style="width:28%">Log</th>
-                <th style="width:25%">Status File</th>
+                <th style="width:30%">Job</th>
+                <th style="width:10%">Duration</th>
+                <th style="width:25%">Log</th>
+                <th style="width:22%">Status File</th>
+                <th style="width:13%">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -39,9 +40,6 @@
                         {% for key in matrix_arg_keys %}
                         <span class="matrix-tag">{{ key|replace('_version', '') }}={{ job.matrix_args_parsed.get(key, '-') }}</span>
                         {% endfor %}
-                        {% if job.status_file_path %}
-                        <button class="btn btn-sm rerun-btn" data-command="slurm-ci relaunch {{ job.status_file_path }}" title="Copy rerun command to clipboard">Rerun</button>
-                        {% endif %}
                     </div>
                     <div class="cell-sub">
                         {{ job.name or '-' }}
@@ -76,10 +74,17 @@
                         -
                     {% endif %}
                 </td>
+                <td>
+                    {% if job.status_file_path %}
+                    <button class="btn btn-sm rerun-btn" data-command="slurm-ci relaunch {{ job.status_file_path }}" title="Copy rerun command to clipboard">Rerun</button>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="4">No jobs found for this build.</td>
+                <td colspan="5">No jobs found for this build.</td>
             </tr>
             {% endfor %}
         </tbody>

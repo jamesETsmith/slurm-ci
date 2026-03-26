@@ -89,7 +89,7 @@ def test_stop_service_timeout_requires_force(tmp_path: Path) -> None:
     with patch("slurm_ci.service_manager.psutil.Process") as mock_process:
         proc = Mock()
         proc.is_running.return_value = True
-        proc.wait.side_effect = psutil.TimeoutExpired(3333, timeout=1)
+        proc.wait.side_effect = psutil.TimeoutExpired(seconds=1, pid=3333)
         mock_process.return_value = proc
 
         assert manager.stop_service("db-watch", timeout=1, force=False) is False

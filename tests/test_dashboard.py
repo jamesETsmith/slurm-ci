@@ -110,6 +110,7 @@ def test_index_route_filter_and_summary_context() -> None:
         status="failed",
         branch="main",
         workflow_file=".github/workflows/test.yml",
+        repo_full_name="org/repo",
         created_at=SimpleNamespace(strftime=lambda _fmt: "2025-01-01 00:00:00"),
         jobs=[
             SimpleNamespace(
@@ -154,6 +155,7 @@ def test_index_partials_render() -> None:
         status="completed",
         branch="dev",
         workflow_file="workflow.yml",
+        repo_full_name="org/repo",
         created_at=SimpleNamespace(strftime=lambda _fmt: "2025-01-01 00:00:00"),
         jobs=[],
     )
