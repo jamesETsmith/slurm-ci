@@ -6,7 +6,6 @@ import os
 import subprocess
 import time
 from datetime import datetime
-from fnmatch import fnmatch
 from pathlib import Path
 from typing import Optional, cast
 
@@ -16,6 +15,7 @@ import toml
 from .daemon_manager import DaemonManager
 from .database import CommitStatus, CommitTracker, GitRepo, SessionLocal, init_db
 from .git_watch_config import GitWatchConfig
+from .ref_matcher import RefPatternSet, short_name
 from .slurm_launcher import launch_slurm_jobs
 
 
@@ -135,41 +135,46 @@ class GitWatcher:
         finally:
             session.close()
 
+    def _ref_patterns(self) -> RefPatternSet:
+        """Build the ref pattern set from the current configuration."""
+        return RefPatternSet.from_branch(self.config.branch)
+
     def _branch_ref_pattern(self) -> str:
-        """Build a git ref pattern for ls-remote from config branch."""
-        branch = self.config.branch
-        if branch.startswith("refs/"):
-            return branch
-        return f"refs/heads/{branch}"
+        """Return the single ref pattern for ls-remote (legacy helper)."""
+        return self._ref_patterns().ls_remote_args()[0]
 
     def _fetch_latest_commits(self) -> list[tuple[str, str]]:
-        """Fetch latest commit SHAs and branch names from git refs."""
-        try:
-            ref_pattern = self._branch_ref_pattern()
-            ls_remote_output = subprocess.check_output(
-                ["git", "ls-remote", self.config.repo_url, ref_pattern]
-            )
-            branch_pattern = self.config.branch.removeprefix("refs/heads/")
+        """Fetch latest commit SHAs and short ref names matching the config.
 
-            commits_by_branch: dict[str, str] = {}
+        Runs a single ``git ls-remote`` with the configured include patterns
+        and filters the results through :class:`RefPatternSet` so the same
+        include/exclude semantics apply to branches and tags.
+        """
+        try:
+            patterns = self._ref_patterns()
+            ls_remote_output = subprocess.check_output(
+                [
+                    "git",
+                    "ls-remote",
+                    self.config.repo_url,
+                    *patterns.ls_remote_args(),
+                ]
+            )
+
+            commits_by_ref: dict[str, str] = {}
             for line in ls_remote_output.decode("utf-8").splitlines():
                 parts = line.split("\t", maxsplit=1)
                 if len(parts) != 2:
                     continue
 
                 commit_sha, ref_name = parts
-                if not ref_name.startswith("refs/heads/"):
+                if not patterns.matches(ref_name):
                     continue
 
-                branch_name = ref_name.removeprefix("refs/heads/")
-                if not fnmatch(branch_name, branch_pattern):
-                    continue
-
-                commits_by_branch[branch_name] = commit_sha
+                commits_by_ref[short_name(ref_name)] = commit_sha
 
             return [
-                (commit_sha, branch_name)
-                for branch_name, commit_sha in sorted(commits_by_branch.items())
+                (commit_sha, ref) for ref, commit_sha in sorted(commits_by_ref.items())
             ]
         except Exception as e:
             self.logger.error(f"Error fetching latest commits: {e}")
