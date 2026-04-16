@@ -232,6 +232,10 @@ def build_act_command(
     for var, value in combo.items():
         act_args += f"--matrix {var}:{value} "
 
+    # Use SLURM_JOB_ID (expanded at runtime) to give each job a unique
+    # container name so multiple matrix combos on the same node don't collide.
+    act_args += '--container-options "--name=slurm-ci-$SLURM_JOB_ID" '
+
     if dryrun:
         act_args += " --dryrun"
 

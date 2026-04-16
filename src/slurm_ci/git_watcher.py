@@ -451,9 +451,11 @@ class GitWatcher:
             self.logger.info(f"Repository: {self.config.repo_url}")
             self.logger.info(f"Branch: {target_branch}")
 
-            # Launch slurm jobs with git repository info
-            # Use a placeholder working directory since the actual repo will be
-            # cloned on compute nodes
+            # Separate matrix_map from slurm options so launch_slurm_jobs
+            # can apply per-combo GRES overrides.
+            sbatch_options = dict(self.config.slurm_options or {})
+            matrix_map = sbatch_options.pop("matrix_map", None)
+
             launch_slurm_jobs(
                 str(workflow_file),
                 self.config.working_directory,
@@ -461,7 +463,8 @@ class GitWatcher:
                 git_repo=git_repo,
                 git_repo_url=self.config.repo_url,
                 git_repo_branch=target_branch,
-                custom_sbatch_options=self.config.slurm_options,
+                custom_sbatch_options=sbatch_options,
+                matrix_map=matrix_map,
             )
 
             self.logger.info(f"Successfully triggered CI job for commit: {commit_sha}")

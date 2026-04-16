@@ -216,8 +216,43 @@ def db_soft_reset(args: argparse.Namespace) -> None:
 
 def git_watch_start(args: argparse.Namespace) -> None:
     """Start a git-watch daemon."""
-    print(f"Starting git-watch daemon from config: {args.config_file}")
-    start_git_watcher(args.config_file)
+    config_path = str(Path(args.config_file).resolve())
+
+    if getattr(args, "foreground", False):
+        start_git_watcher(config_path)
+        return
+
+    from slurm_ci.git_watch_config import GitWatchConfig
+
+    config = GitWatchConfig.from_file(config_path)
+    config.validate()
+
+    daemon_manager = DaemonManager()
+    if daemon_manager.is_daemon_running(config.daemon_name):
+        print(f"Daemon {config.daemon_name} is already running")
+        return
+
+    command = [
+        sys.executable,
+        "-m",
+        "slurm_ci.cli",
+        "git-watch",
+        "start",
+        "--foreground",
+        config_path,
+    ]
+
+    log_file = daemon_manager.get_log_file(config.daemon_name)
+    with open(log_file, "a") as log_handle:
+        subprocess.Popen(
+            command,
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+
+    print(f"Started git-watch daemon: {config.daemon_name}")
+    print(f"  Log: {log_file}")
 
 
 def git_watch_stop(args: argparse.Namespace) -> None:
@@ -527,6 +562,11 @@ def main() -> None:
     )
     parser_git_watch_start.add_argument(
         "config_file", help="Path to git-watch configuration file."
+    )
+    parser_git_watch_start.add_argument(
+        "--foreground",
+        action="store_true",
+        help="Run in foreground instead of daemonizing.",
     )
     parser_git_watch_start.set_defaults(func=git_watch_start)
 
