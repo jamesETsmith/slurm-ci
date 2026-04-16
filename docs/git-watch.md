@@ -38,8 +38,59 @@ workflow_file = "workflows/ci.yml"
 
 #### `[repository]` section
 - `url`: GitHub repository URL in HTTPS or SSH format (required)
-- `branch`: Git branch to monitor (default: "main")
+- `branch`: Git branch or wildcard pattern to monitor (default: `"main"`). Accepts
+  short branch names (`main`), wildcards (`release/*`), or fully-qualified refs
+  (`refs/tags/v*`).
+- `branches`: List of branch/ref patterns. Mutually exclusive with `branch` and
+  `refs`. Example: `branches = ["main", "release/*"]`.
+- `refs`: Table with `include`, optional `exclude`, and optional `match_style`.
+  Mutually exclusive with `branch` and `branches`. See *Branch patterns* below.
 - `github_token`: Personal access token for private repos or higher rate limits (optional)
+
+##### Branch patterns
+
+Each poll runs a single `git ls-remote` with the configured include patterns
+and filters the returned refs locally. Every matching ref produces an
+independent CI run (subject to the existing commit-tracker dedup, so each
+unique commit SHA is still only triggered once).
+
+Two match styles are available, controlled by `refs.match_style`:
+
+| Style       | `*` behavior                  | `**` behavior             | Default |
+|-------------|-------------------------------|---------------------------|---------|
+| `fnmatch`   | Matches across `/`            | Not special               | yes     |
+| `git`       | Does **not** cross `/`        | Matches 0+ segments       | no      |
+
+`fnmatch` is the default for backward compatibility with existing configs
+that used patterns like `release/*`.
+
+Examples:
+
+```toml
+# Single pattern (legacy form)
+[repository]
+branch = "release/*"
+```
+
+```toml
+# Multiple patterns
+[repository]
+branches = ["main", "release/*"]
+```
+
+```toml
+# Include/exclude with git-style matching
+[repository]
+url = "https://github.com/user/repo"
+
+[repository.refs]
+include = ["main", "refs/tags/v*"]
+exclude = ["release/*-rc*"]
+match_style = "git"
+```
+
+With `match_style = "git"`, `release/*` matches `release/1.0` but not
+`release/1.0/hotfix`; use `release/**` to cover nested segments.
 
 #### `[slurm-ci]` section
 - `config_dir`: Directory containing slurm-ci configuration files (required)

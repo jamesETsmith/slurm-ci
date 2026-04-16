@@ -136,6 +136,33 @@ time = "12:00:00"
 partition = "gpu"
 ```
 
+The `[repository]` section also accepts wildcard ref patterns. Use any one
+of the forms below (they are mutually exclusive):
+
+```toml
+[repository]
+branch = "release/*"                       # single pattern
+```
+
+```toml
+[repository]
+branches = ["main", "release/*"]           # list of patterns
+```
+
+```toml
+[repository]
+url = "https://github.com/user/repo"
+
+[repository.refs]
+include = ["main", "refs/tags/v*"]
+exclude = ["release/*-rc*"]
+match_style = "git"                        # "fnmatch" (default) or "git"
+```
+
+Each matching ref triggers an independent CI run. See
+[`docs/git-watch.md`](docs/git-watch.md#branch-patterns) for the full
+pattern-matching reference.
+
 **2. Start a daemon:**
 
 **Usage:**
