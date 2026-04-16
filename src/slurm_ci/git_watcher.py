@@ -90,7 +90,7 @@ class GitWatcher:
             if existing_repo:
                 # Update existing repo
                 existing_repo.repo_url = self.config.repo_url
-                existing_repo.branch = self.config.branch
+                existing_repo.branch = self.config.branch_label()
                 existing_repo.workflow_file = self.config.workflow_file
                 existing_repo.working_directory = self.config.working_directory
                 existing_repo.polling_interval = self.config.polling_interval
@@ -104,7 +104,7 @@ class GitWatcher:
                 new_repo = GitRepo(
                     daemon_name=self.config.daemon_name,
                     repo_url=self.config.repo_url,
-                    branch=self.config.branch,
+                    branch=self.config.branch_label(),
                     workflow_file=self.config.workflow_file,
                     working_directory=self.config.working_directory,
                     polling_interval=self.config.polling_interval,
@@ -137,7 +137,7 @@ class GitWatcher:
 
     def _ref_patterns(self) -> RefPatternSet:
         """Build the ref pattern set from the current configuration."""
-        return RefPatternSet.from_branch(self.config.branch)
+        return self.config.ref_patterns()
 
     def _branch_ref_pattern(self) -> str:
         """Return the single ref pattern for ls-remote (legacy helper)."""
@@ -522,7 +522,7 @@ class GitWatcher:
         """Run the git watcher daemon."""
         self.logger.info(f"Starting git-watch daemon: {self.config.daemon_name}")
         self.logger.info(f"Repository: {self.config.repo_url}")
-        self.logger.info(f"Branch: {self.config.branch}")
+        self.logger.info(f"Branch: {self.config.branch_label()}")
         self.logger.info(f"Polling interval: {self.config.polling_interval} seconds")
 
         # Set up signal handlers

@@ -189,6 +189,79 @@ class TestGitWatcherFetchCommit:
     @patch("slurm_ci.git_watcher.SessionLocal")
     @patch("slurm_ci.git_watcher.DaemonManager")
     @patch("slurm_ci.git_watcher.subprocess.check_output")
+    def test_fetch_latest_commits_branches_list(
+        self,
+        mock_check_output: Mock,
+        mock_dm: Mock,
+        mock_session_class: Mock,
+        mock_init_db: Mock,
+        sample_config: GitWatchConfig,
+    ) -> None:
+        """Test fetching branch heads for an explicit branches list."""
+        mock_session = Mock()
+        mock_session_class.return_value = mock_session
+
+        mock_query = Mock()
+        mock_query.filter.return_value.first.return_value = None
+        mock_session.query.return_value = mock_query
+
+        sample_config.branches = ["main", "release/*"]
+        mock_check_output.return_value = (
+            b"111111111111\trefs/heads/main\n"
+            b"222222222222\trefs/heads/release/1.0\n"
+            b"333333333333\trefs/heads/feature/x\n"
+        )
+
+        watcher = GitWatcher(sample_config)
+        commits = watcher._fetch_latest_commits()
+
+        assert commits == [
+            ("111111111111", "main"),
+            ("222222222222", "release/1.0"),
+        ]
+        # ls-remote should have been called with both include patterns
+        call_args = mock_check_output.call_args[0][0]
+        assert "refs/heads/main" in call_args
+        assert "refs/heads/release/*" in call_args
+
+    @patch("slurm_ci.git_watcher.init_db")
+    @patch("slurm_ci.git_watcher.SessionLocal")
+    @patch("slurm_ci.git_watcher.DaemonManager")
+    @patch("slurm_ci.git_watcher.subprocess.check_output")
+    def test_fetch_latest_commits_refs_include_exclude_git_style(
+        self,
+        mock_check_output: Mock,
+        mock_dm: Mock,
+        mock_session_class: Mock,
+        mock_init_db: Mock,
+        sample_config: GitWatchConfig,
+    ) -> None:
+        """Test that refs.exclude filters results and git-style respects slashes."""
+        mock_session = Mock()
+        mock_session_class.return_value = mock_session
+
+        mock_query = Mock()
+        mock_query.filter.return_value.first.return_value = None
+        mock_session.query.return_value = mock_query
+
+        sample_config.refs_include = ["release/*"]
+        sample_config.refs_exclude = ["release/*-rc*"]
+        sample_config.match_style = "git"
+        mock_check_output.return_value = (
+            b"aaa111\trefs/heads/release/1.0\n"
+            b"bbb222\trefs/heads/release/1.0-rc1\n"
+            b"ccc333\trefs/heads/release/1.0/hotfix\n"
+        )
+
+        watcher = GitWatcher(sample_config)
+        commits = watcher._fetch_latest_commits()
+
+        assert commits == [("aaa111", "release/1.0")]
+
+    @patch("slurm_ci.git_watcher.init_db")
+    @patch("slurm_ci.git_watcher.SessionLocal")
+    @patch("slurm_ci.git_watcher.DaemonManager")
+    @patch("slurm_ci.git_watcher.subprocess.check_output")
     def test_fetch_latest_commits_wildcard_branch(
         self,
         mock_check_output: Mock,

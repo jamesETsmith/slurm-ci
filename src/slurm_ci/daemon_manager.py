@@ -82,7 +82,7 @@ class DaemonManager:
             "last_commit": last_commit,
             "config": {
                 "repo_url": config.repo_url,
-                "branch": config.branch,
+                "branch": config.branch_label(),
                 "polling_interval": config.polling_interval,
                 "workflow_file": config.workflow_file,
                 "working_directory": config.working_directory,

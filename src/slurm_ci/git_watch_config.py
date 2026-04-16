@@ -1,16 +1,32 @@
 #!/usr/bin/env python3
 """Configuration parser for git-watch functionality."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import toml
+
+from .ref_matcher import MatchStyle, RefPatternSet
 
 
 @dataclass
 class GitWatchConfig:
-    """Configuration for a git-watch daemon instance."""
+    """Configuration for a git-watch daemon instance.
+
+    Ref selection can be provided in one of three mutually-exclusive forms
+    in the ``[repository]`` section of the TOML config:
+
+    * ``branch = "<name-or-pattern>"`` — legacy scalar, default ``"main"``.
+    * ``branches = ["<name-or-pattern>", ...]`` — list of patterns.
+    * ``[repository.refs]`` table with ``include``, optional ``exclude``,
+      and optional ``match_style``. Entries may be short branch names or
+      fully-qualified refs (``refs/heads/...``, ``refs/tags/...``).
+
+    ``match_style`` applies to all three forms and is either ``"fnmatch"``
+    (default, ``*`` crosses ``/`` — legacy behavior) or ``"git"`` (``*``
+    does not cross ``/``; ``**`` matches zero or more path segments).
+    """
 
     # Required fields (no defaults)
     daemon_name: str
@@ -21,6 +37,10 @@ class GitWatchConfig:
     # Optional fields (with defaults)
     polling_interval: int = 300
     branch: str = "main"
+    branches: Optional[List[str]] = None
+    refs_include: Optional[List[str]] = None
+    refs_exclude: List[str] = field(default_factory=list)
+    match_style: MatchStyle = "fnmatch"
     github_token: Optional[str] = None
     slurm_options: Optional[Dict[str, Any]] = None
 
@@ -69,24 +89,121 @@ class GitWatchConfig:
             "slurm-ci.working_directory": slurm_config.get("working_directory"),
         }
 
-        missing_fields = [
-            field for field, value in required_fields.items() if not value
-        ]
+        missing_fields = [name for name, value in required_fields.items() if not value]
         if missing_fields:
             raise ValueError(
                 f"Missing required configuration fields: {', '.join(missing_fields)}"
             )
 
+        branch_scalar = repo_config.get("branch")
+        branches_list = repo_config.get("branches")
+        refs_table = repo_config.get("refs")
+
+        specified = [
+            key
+            for key, value in (
+                ("branch", branch_scalar),
+                ("branches", branches_list),
+                ("refs", refs_table),
+            )
+            if value is not None
+        ]
+        if len(specified) > 1:
+            raise ValueError(
+                "Configure at most one of 'repository.branch', "
+                f"'repository.branches', or 'repository.refs'; got: {specified}"
+            )
+
+        refs_include: Optional[List[str]] = None
+        refs_exclude: List[str] = []
+        match_style: MatchStyle = "fnmatch"
+
+        if refs_table is not None:
+            if not isinstance(refs_table, dict):
+                raise ValueError("'repository.refs' must be a table")
+            include = refs_table.get("include")
+            if not include:
+                raise ValueError("'repository.refs.include' must be a non-empty list")
+            if not isinstance(include, list) or not all(
+                isinstance(p, str) for p in include
+            ):
+                raise ValueError("'repository.refs.include' must be a list of strings")
+            refs_include = [str(p) for p in include]
+
+            exclude = refs_table.get("exclude", [])
+            if exclude and (
+                not isinstance(exclude, list)
+                or not all(isinstance(p, str) for p in exclude)
+            ):
+                raise ValueError("'repository.refs.exclude' must be a list of strings")
+            refs_exclude = [str(p) for p in exclude] if exclude else []
+
+            style_raw = refs_table.get("match_style", "fnmatch")
+            if style_raw not in ("fnmatch", "git"):
+                raise ValueError(
+                    f"Unknown 'repository.refs.match_style' {style_raw!r}; "
+                    "expected 'fnmatch' or 'git'"
+                )
+            match_style = style_raw
+
+        normalized_branches: Optional[List[str]] = None
+        if branches_list is not None:
+            if not isinstance(branches_list, list) or not branches_list:
+                raise ValueError(
+                    "'repository.branches' must be a non-empty list of strings"
+                )
+            if not all(isinstance(b, str) for b in branches_list):
+                raise ValueError("'repository.branches' entries must all be strings")
+            normalized_branches = [str(b) for b in branches_list]
+
         return cls(
             daemon_name=daemon_config["name"],
             polling_interval=daemon_config.get("polling_interval", 300),
             repo_url=repo_config["url"],
-            branch=repo_config.get("branch", "main"),
+            branch=branch_scalar if branch_scalar is not None else "main",
+            branches=normalized_branches,
+            refs_include=refs_include,
+            refs_exclude=refs_exclude,
+            match_style=match_style,
             github_token=repo_config.get("github_token"),
             workflow_file=slurm_config["workflow_file"],
             working_directory=slurm_config["working_directory"],
             slurm_options=slurm_config.get("slurm"),
         )
+
+    def ref_patterns(self) -> RefPatternSet:
+        """Build the :class:`RefPatternSet` corresponding to this config.
+
+        Precedence: ``refs.include`` > ``branches`` > ``branch``. Exactly one
+        of these is populated in practice, enforced by :meth:`from_dict`.
+        """
+        if self.refs_include:
+            return RefPatternSet.from_refs(
+                include=self.refs_include,
+                exclude=self.refs_exclude,
+                match_style=self.match_style,
+            )
+        if self.branches:
+            return RefPatternSet.from_branches(
+                self.branches, match_style=self.match_style
+            )
+        return RefPatternSet.from_branch(self.branch, match_style=self.match_style)
+
+    def branch_label(self) -> str:
+        """Return a human-readable summary of the watched refs.
+
+        Used for display in logs, the daemon status file, and the
+        ``git_repos`` table. Legacy scalar configs return just the branch
+        name so existing dashboards continue to display unchanged values.
+        """
+        if self.refs_include:
+            label = ",".join(self.refs_include)
+            if self.refs_exclude:
+                label = f"{label} !({','.join(self.refs_exclude)})"
+            return label
+        if self.branches:
+            return ",".join(self.branches)
+        return self.branch
 
     def validate(self) -> None:
         """Validate the configuration."""
@@ -95,6 +212,10 @@ class GitWatchConfig:
 
         if not self.repo_url.startswith(("https://github.com/", "git@github.com:")):
             raise ValueError("Only GitHub repositories are currently supported")
+
+        # Materializing the pattern set validates match_style and the
+        # include/exclude entries (non-empty, normalizable).
+        self.ref_patterns()
 
     def get_repo_name(self) -> str:
         """Extract repository name from URL."""
