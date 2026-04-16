@@ -88,14 +88,16 @@ class GitWatcher:
             )
 
             if existing_repo:
-                # Update existing repo
-                existing_repo.repo_url = self.config.repo_url
-                existing_repo.branch = self.config.branch_label()
-                existing_repo.workflow_file = self.config.workflow_file
-                existing_repo.working_directory = self.config.working_directory
-                existing_repo.polling_interval = self.config.polling_interval
-                existing_repo.is_active = True
-                existing_repo.updated_at = datetime.utcnow()
+                # Update existing repo. ty flags SQLAlchemy ORM attribute
+                # assignment as invalid because the mapped types are exposed
+                # as Column[Unknown]; these assignments are correct at runtime.
+                existing_repo.repo_url = self.config.repo_url  # ty: ignore[invalid-assignment]
+                existing_repo.branch = self.config.branch_label()  # ty: ignore[invalid-assignment]
+                existing_repo.workflow_file = self.config.workflow_file  # ty: ignore[invalid-assignment]
+                existing_repo.working_directory = self.config.working_directory  # ty: ignore[invalid-assignment]
+                existing_repo.polling_interval = self.config.polling_interval  # ty: ignore[invalid-assignment]
+                existing_repo.is_active = True  # ty: ignore[invalid-assignment]
+                existing_repo.updated_at = datetime.utcnow()  # ty: ignore[invalid-assignment]
                 self.logger.info(
                     f"Updated existing repo entry: {self.config.daemon_name}"
                 )
@@ -263,9 +265,10 @@ class GitWatcher:
                 self.logger.error("Repository not found in database")
                 return
 
-            # Update repo's last commit
-            repo.last_commit_sha = commit_sha
-            repo.last_checked_at = datetime.utcnow()
+            # Update repo's last commit. See comment in _setup_database for
+            # why ty's invalid-assignment rule is suppressed on ORM writes.
+            repo.last_commit_sha = commit_sha  # ty: ignore[invalid-assignment]
+            repo.last_checked_at = datetime.utcnow()  # ty: ignore[invalid-assignment]
 
             # Check if tracker already exists
             tracker = (
@@ -278,12 +281,12 @@ class GitWatcher:
             )
 
             if tracker:
-                # Update existing tracker
-                tracker.status = status.value
-                tracker.build_triggered = build_triggered
+                # Update existing tracker (SQLAlchemy ORM writes, see above).
+                tracker.status = status.value  # ty: ignore[invalid-assignment]
+                tracker.build_triggered = build_triggered  # ty: ignore[invalid-assignment]
                 if build_id:
-                    tracker.build_id = build_id
-                tracker.last_updated = datetime.utcnow()
+                    tracker.build_id = build_id  # ty: ignore[invalid-assignment]
+                tracker.last_updated = datetime.utcnow()  # ty: ignore[invalid-assignment]
                 self.logger.info(
                     f"Updated commit {commit_sha} status to: {status.value}"
                 )

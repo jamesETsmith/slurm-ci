@@ -300,21 +300,24 @@ class StatusWatcher:
 
     def update_build_status(self, session: Session, build: Build) -> None:
         """Update build status based on its jobs."""
+        # ty flags SQLAlchemy ORM attribute assignment (`build.status = "..."`)
+        # as invalid because mapped columns appear as Column[Unknown]; these
+        # writes are correct at runtime.
         terminal = {"completed", "failed", "incomplete"}
         jobs = session.query(Job).filter(Job.build_id == build.id).all()
 
         if not jobs:
-            build.status = "pending"
+            build.status = "pending"  # ty: ignore[invalid-assignment]
         elif all(job.status in terminal for job in jobs):
             statuses = {job.status for job in jobs}
             if statuses == {"completed"}:
-                build.status = "completed"
+                build.status = "completed"  # ty: ignore[invalid-assignment]
             elif "failed" in statuses:
-                build.status = "failed"
+                build.status = "failed"  # ty: ignore[invalid-assignment]
             else:
-                build.status = "incomplete"
+                build.status = "incomplete"  # ty: ignore[invalid-assignment]
         else:
-            build.status = "running"
+            build.status = "running"  # ty: ignore[invalid-assignment]
 
     def reap_incomplete_jobs(self, stale_threshold_s: float = 3600) -> int:
         """Mark running/pending jobs as incomplete when their Slurm job is gone.
@@ -354,7 +357,7 @@ class StatusWatcher:
                     active = is_slurm_job_active(slurm_job_id)
                     if active is None or active:
                         continue
-                    job.status = "incomplete"
+                    job.status = "incomplete"  # ty: ignore[invalid-assignment]
                     logger.info(
                         "Reaped job %s (slurm %s): marked incomplete",
                         job.name,
@@ -367,7 +370,7 @@ class StatusWatcher:
                     elapsed = now_ts - float(start_time)
                     if elapsed < stale_threshold_s:
                         continue
-                    job.status = "incomplete"
+                    job.status = "incomplete"  # ty: ignore[invalid-assignment]
                     logger.info(
                         "Reaped job %s (no slurm id, stale %.0fs): marked incomplete",
                         job.name,

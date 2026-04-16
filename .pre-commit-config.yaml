@@ -30,7 +30,7 @@ repos:
       args: [check, --python-version, "3.12", src]
       language: python
       additional_dependencies:
-        - ty==0.0.24
+        - ty
         - flask
         - requests
         - sqlalchemy
