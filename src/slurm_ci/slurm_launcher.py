@@ -232,10 +232,6 @@ def build_act_command(
     for var, value in combo.items():
         act_args += f"--matrix {var}:{value} "
 
-    # Use SLURM_JOB_ID (expanded at runtime) to give each job a unique
-    # container name so multiple matrix combos on the same node don't collide.
-    act_args += '--container-options "--name=slurm-ci-$SLURM_JOB_ID" '
-
     if dryrun:
         act_args += " --dryrun"
 
@@ -289,6 +285,13 @@ def _launch_single_job(
     # Build the main command
     main_command = build_act_command(workflow_file, combo, dryrun)
 
+    # Append SLURM_JOB_ID to the workflow name so act generates a unique
+    # container name per job, preventing collisions when multiple matrix
+    # combos land on the same compute node.
+    pre_commands = [
+        f'sed -i "s/^name: .*/& $SLURM_JOB_ID/" {workflow_file}',
+    ]
+
     # Render the SLURM script
     slurm_script = renderer.render_script(
         template_name=template_name,
@@ -298,6 +301,7 @@ def _launch_single_job(
         status_file=status_file.status_file,
         cleanup_temp_dir=True,
         git_repo=git_repo,
+        pre_commands=pre_commands,
     )
 
     # Add slurm script to status file
