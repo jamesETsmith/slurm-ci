@@ -2,28 +2,48 @@
 
 import logging
 import subprocess
-from typing import Any, Dict, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 
 logger = logging.getLogger(__name__)
 
 
-def get_job_info_from_sacct(job_id: int) -> Optional[Dict[str, Any]]:
+@dataclass
+class SacctResult:
+    """Typed result from a sacct query."""
+
+    state: str
+    exit_code: Optional[int]
+
+
+class SacctError(Exception):
+    """Raised when sacct is unavailable or returns unusable output."""
+
+
+def get_job_info_from_sacct(job_id: int) -> Optional[SacctResult]:
     """Query sacct for job information.
 
     Args:
-        job_id: The SLURM job ID
+        job_id: The SLURM job ID.
 
     Returns:
-        Dictionary with 'state' and 'exit_code' keys, or None if query fails
+        :class:`SacctResult` on success, or ``None`` if the job ID is
+        invalid / not yet visible to sacct (not an error condition).
+
+    Raises:
+        SacctError: If sacct itself is unavailable or returns an
+            unexpected format.  Callers that only care about *job* state
+            rather than *tool* availability should catch this and treat
+            it as "unknown".
     """
     if job_id is None or job_id < 0:
-        logger.debug(f"Skipping sacct query for job_id={job_id} (local run or not set)")
+        logger.debug(
+            "Skipping sacct query for job_id=%s (local run or not set)", job_id
+        )
         return None
 
     try:
-        # Query sacct for job state and exit code
-        # Format: State|ExitCode
         result = subprocess.run(
             [
                 "sacct",
@@ -37,47 +57,46 @@ def get_job_info_from_sacct(job_id: int) -> Optional[Dict[str, Any]]:
             text=True,
             timeout=10,
         )
-
-        if result.returncode != 0:
-            logger.warning(f"sacct query failed for job {job_id}: {result.stderr}")
-            return None
-
-        # Parse output - get the first line (main job info, not job steps)
-        lines = result.stdout.strip().split("\n")
-        if not lines or not lines[0]:
-            logger.warning(f"No output from sacct for job {job_id}")
-            return None
-
-        # First line is the main job, format: STATE|EXIT_CODE:SIGNAL
-        parts = lines[0].split("|")
-        if len(parts) < 2:
-            logger.warning(
-                f"Unexpected sacct output format for job {job_id}: {lines[0]}"
-            )
-            return None
-
-        state = parts[0].strip()
-        exit_code_str = parts[1].strip()
-
-        # Parse exit code (format is "exitcode:signal", we want just the exit code)
-        exit_code = None
-        if exit_code_str and exit_code_str != "":
-            try:
-                # Exit code format can be "0:0" or just "0"
-                exit_code = int(exit_code_str.split(":")[0])
-            except (ValueError, IndexError):
-                logger.warning(f"Could not parse exit code from: {exit_code_str}")
-
-        logger.debug(f"Job {job_id} - State: {state}, Exit Code: {exit_code}")
-
-        return {"state": state, "exit_code": exit_code}
-
     except subprocess.TimeoutExpired:
-        logger.error(f"sacct query timed out for job {job_id}")
+        raise SacctError(f"sacct query timed out for job {job_id}")
+    except FileNotFoundError:
+        raise SacctError("sacct binary not found — is Slurm installed?")
+    except OSError as e:
+        raise SacctError(f"sacct invocation failed for job {job_id}: {e}")
+
+    if result.returncode != 0:
+        raise SacctError(
+            f"sacct exited {result.returncode} for job {job_id}: "
+            f"{result.stderr.strip()}"
+        )
+
+    lines = result.stdout.strip().split("\n")
+    if not lines or not lines[0]:
+        # Job not yet visible to sacct (submitted but not started) — not an error.
+        logger.debug("No sacct output for job %s (may not be visible yet)", job_id)
         return None
-    except Exception as e:
-        logger.error(f"Error querying sacct for job {job_id}: {e}")
-        return None
+
+    # First non-empty line is the main job (not a step).
+    parts = lines[0].split("|")
+    if len(parts) < 2:
+        raise SacctError(
+            f"Unexpected sacct output format for job {job_id}: {lines[0]!r}"
+        )
+
+    state = parts[0].strip()
+    exit_code_str = parts[1].strip()
+
+    exit_code: Optional[int] = None
+    if exit_code_str:
+        try:
+            exit_code = int(exit_code_str.split(":")[0])
+        except (ValueError, IndexError):
+            logger.warning(
+                "Could not parse exit code %r for job %s", exit_code_str, job_id
+            )
+
+    logger.debug("Job %s — State: %s, Exit Code: %s", job_id, state, exit_code)
+    return SacctResult(state=state, exit_code=exit_code)
 
 
 _ACTIVE_SLURM_STATES = {"PENDING", "RUNNING", "CONFIGURING", "COMPLETING", "SUSPENDED"}
@@ -86,10 +105,16 @@ _ACTIVE_SLURM_STATES = {"PENDING", "RUNNING", "CONFIGURING", "COMPLETING", "SUSP
 def is_slurm_job_active(job_id: int) -> Optional[bool]:
     """Check whether a Slurm job is still active (queued/running).
 
-    Returns True if active, False if terminal/gone, or None if we cannot
-    determine (e.g. sacct unavailable).
+    Returns:
+        True  — job is active (queued/running).
+        False — job has reached a terminal state or is unknown to sacct.
+        None  — sacct is unavailable; caller should treat as "unknown".
     """
-    info = get_job_info_from_sacct(job_id)
+    try:
+        info = get_job_info_from_sacct(job_id)
+    except SacctError as e:
+        logger.warning("sacct unavailable for job %s: %s", job_id, e)
+        return None
     if info is None:
         return None
-    return info.get("state", "") in _ACTIVE_SLURM_STATES
+    return info.state in _ACTIVE_SLURM_STATES

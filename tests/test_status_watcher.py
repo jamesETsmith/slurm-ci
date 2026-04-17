@@ -62,8 +62,10 @@ def test_extract_job_info_prefers_sacct_for_state_and_exit(tmp_path: Path) -> No
         "ci": {},
         "slurm": {"job_id": 1234},
     }
+    from slurm_ci.slurm_utils import SacctResult
+
     with patch("slurm_ci.status_watcher.get_job_info_from_sacct") as mock_sacct:
-        mock_sacct.return_value = {"state": "FAILED", "exit_code": 7}
+        mock_sacct.return_value = SacctResult(state="FAILED", exit_code=7)
         info = watcher.extract_job_info(status_data, status_file)
     assert info["status"] == "failed"
     assert info["exit_code"] == 7
@@ -266,14 +268,16 @@ def test_extract_job_info_fuzz_runtime_terminal_not_overwritten(tmp_path: Path) 
 
         slurm_state = rng.choice(sacct_states)
         sacct_exit_code = rng.choice([None, 0, 1, 3, 9])
+        from slurm_ci.slurm_utils import SacctResult
+
         with patch("slurm_ci.status_watcher.get_job_info_from_sacct") as mock_sacct:
             if slurm_state is None:
                 mock_sacct.return_value = None
             else:
-                mock_sacct.return_value = {
-                    "state": slurm_state,
-                    "exit_code": sacct_exit_code,
-                }
+                mock_sacct.return_value = SacctResult(
+                    state=slurm_state,
+                    exit_code=sacct_exit_code,
+                )
             info = watcher.extract_job_info(status_data, status_file)
 
         # If runtime has an explicit end marker, we should never classify it
@@ -281,9 +285,21 @@ def test_extract_job_info_fuzz_runtime_terminal_not_overwritten(tmp_path: Path) 
         if has_end:
             assert info["status"] in {"completed", "failed"}
         elif "start_time" in runtime:
-            assert info["status"] in {"running", "completed", "failed", "pending"}
+            assert info["status"] in {
+                "running",
+                "submitted",
+                "completed",
+                "failed",
+                "pending",
+            }
         else:
-            assert info["status"] in {"pending", "completed", "failed", "running"}
+            assert info["status"] in {
+                "pending",
+                "submitted",
+                "completed",
+                "failed",
+                "running",
+            }
 
 
 def test_sync_file_to_db_fuzz_status_transitions_no_stale_running(

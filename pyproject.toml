@@ -59,5 +59,8 @@ select = ["E", "F", "W", "I", "ANN"]
 # Sorts imports automatically
 lines-after-imports = 2
 
+[tool.pytest.ini_options]
+addopts = "--color=no"
+
 [tool.setuptools_scm]
 # This enables setuptools-scm to generate versions from git tags

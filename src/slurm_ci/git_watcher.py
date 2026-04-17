@@ -5,7 +5,7 @@ import logging
 import os
 import subprocess
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, cast
 
@@ -97,7 +97,8 @@ class GitWatcher:
                 existing_repo.working_directory = self.config.working_directory  # ty: ignore[invalid-assignment]
                 existing_repo.polling_interval = self.config.polling_interval  # ty: ignore[invalid-assignment]
                 existing_repo.is_active = True  # ty: ignore[invalid-assignment]
-                existing_repo.updated_at = datetime.utcnow()  # ty: ignore[invalid-assignment]
+                _now = datetime.now(timezone.utc).replace(tzinfo=None)
+                existing_repo.updated_at = _now  # ty: ignore[invalid-assignment]
                 self.logger.info(
                     f"Updated existing repo entry: {self.config.daemon_name}"
                 )
@@ -228,6 +229,7 @@ class GitWatcher:
                 )
                 return True
             elif status in [
+                CommitStatus.SUBMITTED.value,
                 CommitStatus.RUNNING.value,
                 CommitStatus.COMPLETED.value,
                 CommitStatus.FAILED.value,
@@ -268,7 +270,8 @@ class GitWatcher:
             # Update repo's last commit. See comment in _setup_database for
             # why ty's invalid-assignment rule is suppressed on ORM writes.
             repo.last_commit_sha = commit_sha  # ty: ignore[invalid-assignment]
-            repo.last_checked_at = datetime.utcnow()  # ty: ignore[invalid-assignment]
+            _now = datetime.now(timezone.utc).replace(tzinfo=None)
+            repo.last_checked_at = _now  # ty: ignore[invalid-assignment]
 
             # Check if tracker already exists
             tracker = (
@@ -286,7 +289,8 @@ class GitWatcher:
                 tracker.build_triggered = build_triggered  # ty: ignore[invalid-assignment]
                 if build_id:
                     tracker.build_id = build_id  # ty: ignore[invalid-assignment]
-                tracker.last_updated = datetime.utcnow()  # ty: ignore[invalid-assignment]
+                _now = datetime.now(timezone.utc).replace(tzinfo=None)
+                tracker.last_updated = _now  # ty: ignore[invalid-assignment]
                 self.logger.info(
                     f"Updated commit {commit_sha} status to: {status.value}"
                 )
@@ -326,12 +330,17 @@ class GitWatcher:
             if not repo:
                 return
 
-            # Get all running commits
+            # Get all in-flight commits (submitted or actively running)
             running_commits = (
                 session.query(CommitTracker)
                 .filter(
                     CommitTracker.repo_id == repo.id,
-                    CommitTracker.status == CommitStatus.RUNNING.value,
+                    CommitTracker.status.in_(
+                        [
+                            CommitStatus.SUBMITTED.value,
+                            CommitStatus.RUNNING.value,
+                        ]
+                    ),
                 )
                 .all()
             )
@@ -497,16 +506,16 @@ class GitWatcher:
                 f"Processing commit: {latest_commit} on branch: {branch_name}"
             )
 
-            # Mark commit as running before triggering job
-            self._update_commit_status(
-                latest_commit, CommitStatus.RUNNING, build_triggered=True
-            )
-
-            # Trigger CI job
+            # Trigger CI job first — only advance status if sbatch succeeds
             job_triggered = self._trigger_ci_job(latest_commit, branch_name)
 
-            if not job_triggered:
-                # If job failed to trigger, mark as exception for retry
+            if job_triggered:
+                # Jobs accepted by Slurm — waiting for allocation
+                self._update_commit_status(
+                    latest_commit, CommitStatus.SUBMITTED, build_triggered=True
+                )
+            else:
+                # sbatch failed or workflow error — mark for retry
                 self._update_commit_status(
                     latest_commit, CommitStatus.EXCEPTION, build_triggered=False
                 )

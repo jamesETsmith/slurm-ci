@@ -2,6 +2,7 @@ import hashlib
 import logging
 import os
 import subprocess
+import tempfile
 import time
 from collections import OrderedDict
 from typing import Any, Dict, Optional
@@ -119,13 +120,31 @@ class StatusFile:
             return toml.load(f)
 
     def write(self) -> None:
+        """Atomically write the status file using a temp-file + rename.
+
+        Writing directly to the target path risks leaving a truncated or
+        partially-written TOML on disk if the process is killed mid-write
+        (or if a concurrent bash job is appending to the same file). Using
+        ``os.replace`` (an atomic rename on POSIX) eliminates that window.
+        """
         self.logger.info(f"Writing status file to: {self.status_file}")
         try:
             os.makedirs(STATUS_DIR, exist_ok=True)
             self.logger.debug(f"Ensured status directory exists: {STATUS_DIR}")
 
-            with open(self.status_file, "w") as f:
-                toml.dump(self.data, f)
+            target = self.status_file
+            dir_ = os.path.dirname(target) or "."
+            fd, tmp_path = tempfile.mkstemp(dir=dir_, suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    toml.dump(self.data, f)
+                os.replace(tmp_path, target)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
 
             self.logger.info(f"Successfully wrote status file: {self.status_file}")
             self.logger.debug(
@@ -204,7 +223,19 @@ class StatusFile:
                 .decode("utf-8")
                 .strip()
             )
-            self.logger.info(f"Retrieved git branch: {result}")
+            if result == "HEAD":
+                # Detached HEAD — fall back to the short SHA
+                result = (
+                    subprocess.check_output(
+                        ["git", "rev-parse", "--short", "HEAD"],
+                        cwd=self.working_directory,
+                    )
+                    .decode("utf-8")
+                    .strip()
+                )
+                self.logger.info(f"Detached HEAD; using short SHA as branch: {result}")
+            else:
+                self.logger.info(f"Retrieved git branch: {result}")
             return result
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Failed to get git branch: {e}")

@@ -1,5 +1,7 @@
+import logging
 import os
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional, cast
@@ -11,6 +13,9 @@ from slurm_ci.config import STATUS_DIR
 from slurm_ci.slurm_run_config import apply_matrix_mappings
 from slurm_ci.status_file import StatusFile
 from slurm_ci.workflow_parser import WorkflowParser
+
+
+logger = logging.getLogger(__name__)
 
 
 # Default Jinja2 template for SLURM jobs
@@ -37,8 +42,9 @@ export {{ key }}="{{ value }}"
 # Clone repository on compute node
 echo "Cloning repository: {{ git_repo.url }}"
 TEMP_REPO_DIR=$(mktemp -d -t slurm-ci-repo-XXXXXX)
-git clone --depth 1 --branch {{ git_repo.branch }} {{ git_repo.url }} "$TEMP_REPO_DIR"
+git clone --no-checkout {{ git_repo.url }} "$TEMP_REPO_DIR"
 cd "$TEMP_REPO_DIR"
+git fetch --depth 1 origin {{ git_repo.commit_sha }}
 git checkout {{ git_repo.commit_sha }}
 echo "Repository cloned to: $TEMP_REPO_DIR"
 
@@ -123,17 +129,25 @@ class SlurmTemplateRenderer:
                 with open(self.template_path, "r") as f:
                     template_content = f.read()
                 return Template(template_content)
-            except Exception:
-                # Fall back to default if custom template fails
-                pass
+            except Exception as e:
+                logger.warning(
+                    "Failed to load custom template %s (%s); falling back to default",
+                    self.template_path,
+                    e,
+                )
 
         # If template directory is provided, try to load from it
         if self.env:
             try:
                 return self.env.get_template(f"{template_name}.j2")
-            except Exception:
-                # Fall back to default if custom template fails
-                pass
+            except Exception as e:
+                logger.warning(
+                    "Failed to load template %s from directory %s (%s); "
+                    "falling back to default",
+                    template_name,
+                    self.template_dir,
+                    e,
+                )
 
         # Use built-in default template
         return Template(DEFAULT_SLURM_TEMPLATE)
@@ -266,7 +280,7 @@ def _launch_single_job(
     workflow_file = str(status_file.data["project"]["workflow_file"])
 
     task_name = "_".join([str(value) for value in combo.values()])
-    print(str(combo))
+    logger.debug("Launching job for combo: %s", combo)
 
     # Initialize template renderer
     renderer = SlurmTemplateRenderer(template_dir, template_path)
@@ -280,7 +294,7 @@ def _launch_single_job(
     # Apply matrix mappings to SLURM options
     sbatch_options = apply_matrix_mappings(sbatch_options, combo, matrix_map)
 
-    print("Writing logfile to: ", status_file.get_logfile_path())
+    logger.info("Writing logfile to: %s", status_file.get_logfile_path())
 
     # act derives its container name from "<workflow-name>/<job-name>".  The
     # matrix values are NOT included by default. We enforce that users must
@@ -307,29 +321,39 @@ def _launch_single_job(
     status_file.data["slurm"]["slurm_script"] = slurm_script
     status_file.write()
 
-    # Write and submit the script
-    slurm_script_path = f"/tmp/sbatch_{task_name}.sh"
-    with open(slurm_script_path, "w") as f:
-        f.write(slurm_script)
-
-    # Submit the job and capture the job ID
-    result = subprocess.run(
-        ["sbatch", slurm_script_path], capture_output=True, text=True
+    # Write script to a unique temp file to avoid collisions between parallel launches
+    fd, slurm_script_path = tempfile.mkstemp(
+        prefix=f"sbatch_{task_name}_", suffix=".sh", dir="/tmp"
     )
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(slurm_script)
 
-    # Parse job ID from sbatch output (format: "Submitted batch job 12345")
-    if result.returncode == 0 and result.stdout:
-        job_id_str = result.stdout.strip().split()[-1]
+        result = subprocess.run(
+            ["sbatch", slurm_script_path], capture_output=True, text=True
+        )
+    finally:
         try:
-            job_id = int(job_id_str)
-            status_file.set_slurm_job_id(job_id)
-            print(f"Submitted job {job_id}")
-        except ValueError:
-            print(
-                f"Warning: Could not parse job ID from sbatch output: {result.stdout}"
-            )
-    else:
-        print(f"Error submitting job: {result.stderr}")
+            os.unlink(slurm_script_path)
+        except OSError:
+            pass
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"sbatch failed for job {task_name!r} "
+            f"(exit {result.returncode}): {result.stderr.strip()}"
+        )
+
+    job_id_str = result.stdout.strip().split()[-1] if result.stdout else ""
+    try:
+        job_id = int(job_id_str)
+    except ValueError:
+        raise RuntimeError(
+            f"Could not parse job ID from sbatch output: {result.stdout!r}"
+        )
+
+    status_file.set_slurm_job_id(job_id)
+    logger.info("Submitted job %d for combo %s", job_id, combo)
 
 
 def relaunch_slurm_job(

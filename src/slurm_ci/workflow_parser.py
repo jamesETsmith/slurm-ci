@@ -22,6 +22,14 @@ class WorkflowParser:
         with open(workflow_file) as f:
             workflow_content = f.read()
         self.workflow = yaml.safe_load(workflow_content)
+
+        if not isinstance(self.workflow, dict):
+            raise ValueError(
+                f"Workflow file {workflow_file!r} is empty or not a valid YAML mapping."
+            )
+        if "jobs" not in self.workflow:
+            raise ValueError(f"Workflow file {workflow_file!r} has no 'jobs' section.")
+
         self._validate_matrix_job_names()
 
     def _validate_matrix_job_names(self) -> None:
@@ -229,7 +237,12 @@ class WorkflowParser:
         bool
             True if the include object matches the combination, False otherwise.
         """
-        for key, value in include_obj.items():
-            if key in combination and combination[key] != value:
+        # An empty include object would match everything — require at least one
+        # overlapping key to count as a real match.
+        shared_keys = [k for k in include_obj if k in combination]
+        if not shared_keys:
+            return False
+        for key in shared_keys:
+            if combination[key] != include_obj[key]:
                 return False
         return True

@@ -243,6 +243,9 @@ class TestLaunchSlurmJobs:
             return b""
 
         mock_check_output.side_effect = git_mock_side_effect
+        mock_run.return_value = Mock(
+            returncode=0, stdout="Submitted batch job 99999\n", stderr=""
+        )
 
         custom_options = {"partition": "gpu", "time": "02:00:00"}
 
@@ -278,6 +281,9 @@ class TestLaunchSlurmJobs:
             return b""
 
         mock_check_output.side_effect = git_mock_side_effect
+        mock_run.return_value = Mock(
+            returncode=0, stdout="Submitted batch job 99999\n", stderr=""
+        )
 
         matrix_map = {
             "python-version": {
@@ -310,6 +316,9 @@ class TestLaunchSlurmJobs:
             return b""
 
         mock_check_output.side_effect = git_mock_side_effect
+        mock_run.return_value = Mock(
+            returncode=0, stdout="Submitted batch job 99999\n", stderr=""
+        )
 
         git_repo = {
             "url": "https://github.com/user/repo",

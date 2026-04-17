@@ -1,5 +1,7 @@
 import json
 import logging
+import os
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,7 +38,7 @@ class StatusWatcher:
             with open(file_path, "r") as f:
                 return toml.load(f)
         except (IOError, toml.TomlDecodeError) as e:
-            print(f"Error reading {file_path}: {e}")
+            logger.warning("Could not read status file %s: %s", file_path, e)
             return None
 
     def extract_build_info(self, status_data: Dict) -> Dict:
@@ -120,8 +122,8 @@ class StatusWatcher:
 
         # Update status file with sacct data if available
         if sacct_info:
-            slurm_state = sacct_info.get("state")
-            sacct_exit_code = sacct_info.get("exit_code")
+            slurm_state = sacct_info.state
+            sacct_exit_code = sacct_info.exit_code
 
             # Update the status file with sacct data
             if slurm_state:
@@ -129,12 +131,22 @@ class StatusWatcher:
             if sacct_exit_code is not None:
                 slurm_info["sacct_exit_code"] = sacct_exit_code
 
-            # Write back to file if we got new data
+            # Write back atomically so a kill mid-write doesn't corrupt the file
             try:
-                with open(file_path, "w") as f:
-                    toml.dump(status_data, f)
+                dir_ = str(file_path.parent)
+                fd, tmp_path = tempfile.mkstemp(dir=dir_, suffix=".tmp")
+                try:
+                    with os.fdopen(fd, "w") as f:
+                        toml.dump(status_data, f)
+                    os.replace(tmp_path, str(file_path))
+                except Exception:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+                    raise
             except Exception as e:
-                print(f"Warning: Could not update status file with sacct data: {e}")
+                logger.warning("Could not update status file with sacct data: %s", e)
 
             # Use sacct data to refine status when available.
             if slurm_state:
@@ -153,10 +165,9 @@ class StatusWatcher:
                     if not has_end_time:
                         status = "running"
                 elif slurm_state in ["PENDING", "CONFIGURING"]:
-                    # Do not overwrite a terminal runtime state with a transient
-                    # non-terminal scheduler state.
+                    # Submitted to Slurm but not yet allocated a node.
                     if not has_end_time:
-                        status = "pending"
+                        status = "submitted"
                 else:
                     # Unknown scheduler state: keep runtime-derived status.
                     pass
@@ -249,13 +260,12 @@ class StatusWatcher:
                 )
 
                 if not should_update:
-                    print(
-                        f"Skipping update for job {job_info['name']} - "
-                        f"no changes detected in status"
+                    logger.debug(
+                        "Skipping update for job %s — no changes detected",
+                        job_info["name"],
                     )
 
                 if should_update:
-                    # Update existing job with newer information
                     existing_job.status = job_info["status"]
                     existing_job.exit_code = job_info["exit_code"]
                     existing_job.matrix_args = job_info["matrix_args"]
@@ -263,9 +273,8 @@ class StatusWatcher:
                     existing_job.status_file_path = job_info["status_file_path"]
                     existing_job.start_time = job_info["start_time"]
                     existing_job.end_time = job_info["end_time"]
-                    print(
-                        f"Updated job: {job_info['name']} -> "
-                        f"{job_info['status']} (newer status file)"
+                    logger.info(
+                        "Updated job %s -> %s", job_info["name"], job_info["status"]
                     )
             else:
                 # Create new job
@@ -283,7 +292,9 @@ class StatusWatcher:
                     logs=job_info["logs"],
                 )
                 session.add(job)
-                print(f"Created job: {job_info['name']} -> {job_info['status']}")
+                logger.info(
+                    "Created job %s -> %s", job_info["name"], job_info["status"]
+                )
 
             # Update build status based on jobs
             self.update_build_status(session, build)
@@ -292,17 +303,20 @@ class StatusWatcher:
             return True
 
         except Exception as e:
-            print(f"Error syncing {file_path}: {e}")
+            logger.error("Error syncing %s: %s", file_path, e)
             session.rollback()
             return False
         finally:
             session.close()
 
     def update_build_status(self, session: Session, build: Build) -> None:
-        """Update build status based on its jobs."""
-        # ty flags SQLAlchemy ORM attribute assignment (`build.status = "..."`)
-        # as invalid because mapped columns appear as Column[Unknown]; these
-        # writes are correct at runtime.
+        """Update build status based on its jobs.
+
+        Status precedence (highest to lowest):
+          failed > incomplete > running > submitted > completed > pending
+        """
+        # ty flags SQLAlchemy ORM attribute assignment as invalid because the
+        # mapped types are exposed as Column[Unknown]; these writes are correct.
         terminal = {"completed", "failed", "incomplete"}
         jobs = session.query(Job).filter(Job.build_id == build.id).all()
 
@@ -316,6 +330,10 @@ class StatusWatcher:
                 build.status = "failed"  # ty: ignore[invalid-assignment]
             else:
                 build.status = "incomplete"  # ty: ignore[invalid-assignment]
+        elif any(job.status == "running" for job in jobs):
+            build.status = "running"  # ty: ignore[invalid-assignment]
+        elif any(job.status == "submitted" for job in jobs):
+            build.status = "submitted"  # ty: ignore[invalid-assignment]
         else:
             build.status = "running"  # ty: ignore[invalid-assignment]
 
@@ -336,7 +354,9 @@ class StatusWatcher:
         now_ts = time.time()
         try:
             stale_jobs = (
-                session.query(Job).filter(Job.status.in_(["running", "pending"])).all()
+                session.query(Job)
+                .filter(Job.status.in_(["running", "submitted", "pending"]))
+                .all()
             )
 
             for job in stale_jobs:
@@ -406,7 +426,7 @@ class StatusWatcher:
                 synced_count += 1
                 self._processed_files[str(file_path)] = file_path.stat().st_mtime
 
-        print(f"Synced {synced_count}/{len(files)} status files to database")
+        logger.info("Synced %d/%d status files to database", synced_count, len(files))
         return synced_count
 
     def watch_directory(
@@ -422,10 +442,10 @@ class StatusWatcher:
             sync_on_start: Run a full sync before entering the loop.
             reap_interval: Seconds between incomplete-job reap passes.
         """
-        print(f"Watching status directory: {self.status_dir}")
+        logger.info("Watching status directory: %s", self.status_dir)
 
         if sync_on_start:
-            print("Performing initial sync...")
+            logger.info("Performing initial sync...")
             self.sync_all_files()
 
         last_reap_time = time.monotonic()
@@ -452,7 +472,7 @@ class StatusWatcher:
                         )
 
                 if updated_files:
-                    print(f"Processed {len(updated_files)} updated files")
+                    logger.info("Processed %d updated file(s)", len(updated_files))
 
                 now = time.monotonic()
                 if now - last_reap_time >= reap_interval:
@@ -462,7 +482,7 @@ class StatusWatcher:
                 time.sleep(poll_interval)
 
         except KeyboardInterrupt:
-            print("Status watcher stopped")
+            logger.info("Status watcher stopped")
 
 
 def sync_status_to_db(status_dir: Optional[str] = None) -> int:

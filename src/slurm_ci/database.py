@@ -1,4 +1,5 @@
 import datetime
+from datetime import timezone
 from enum import Enum
 
 from sqlalchemy import (
@@ -21,15 +22,21 @@ class CommitStatus(Enum):
     """Enum for commit processing status."""
 
     PENDING = "pending"  # Never seen before, should launch job
-    RUNNING = "running"  # Job is currently running, do not launch
-    COMPLETED = "completed"  # Job completed successfully, do not launch
-    FAILED = "failed"  # Job completed with failure, do not launch
-    EXCEPTION = "exception"  # Job had exception/corruption, should relaunch
+    SUBMITTED = "submitted"  # sbatch accepted; waiting for allocation
+    RUNNING = "running"  # At least one job is running on a node
+    COMPLETED = "completed"  # All jobs completed successfully
+    FAILED = "failed"  # At least one job failed
+    EXCEPTION = "exception"  # Corruption / unexpected error, should relaunch
 
 
 engine = create_engine(config.DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+
+def _now() -> datetime.datetime:
+    """Return the current UTC time as a naive datetime (for SQLite storage)."""
+    return datetime.datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class Build(Base):
@@ -42,7 +49,7 @@ class Build(Base):
     working_directory = Column(String)
     event_type = Column(String)
     status = Column(String, default="pending")
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=_now)
     jobs = relationship("Job", back_populates="build")
 
 
@@ -59,7 +66,7 @@ class Job(Base):
     status_file_path = Column(String)
     start_time = Column(DateTime)
     end_time = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=_now)
     build = relationship("Build", back_populates="jobs")
 
 
@@ -75,9 +82,11 @@ class GitRepo(Base):
     is_active = Column(Boolean, default=True)
     last_checked_at = Column(DateTime)
     last_commit_sha = Column(String)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=_now)
     updated_at = Column(
-        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+        DateTime,
+        default=_now,
+        onupdate=_now,
     )
     commit_trackers = relationship("CommitTracker", back_populates="repo")
 
@@ -87,15 +96,15 @@ class CommitTracker(Base):
     id = Column(Integer, primary_key=True, index=True)
     repo_id = Column(Integer, ForeignKey("git_repos.id"))
     commit_sha = Column(String, index=True)
-    processed_at = Column(DateTime, default=datetime.datetime.utcnow)
+    processed_at = Column(DateTime, default=_now)
     build_triggered = Column(Boolean, default=False)  # Keep for backward compatibility
     build_id = Column(Integer, ForeignKey("builds.id"), nullable=True)
-    # New status field for better tracking
-    status = Column(
-        String, default="pending"
-    )  # pending, running, completed, failed, exception
+    # Status: pending, submitted, running, completed, failed, exception
+    status = Column(String, default="pending")
     last_updated = Column(
-        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+        DateTime,
+        default=_now,
+        onupdate=_now,
     )
     repo = relationship("GitRepo", back_populates="commit_trackers")
     build = relationship("Build")
