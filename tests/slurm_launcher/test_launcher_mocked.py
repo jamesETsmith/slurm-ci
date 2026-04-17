@@ -22,6 +22,7 @@ def sample_workflow_file(tmp_path: Path) -> Path:
 name: Test Workflow
 jobs:
   test:
+    name: test ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     strategy:
       matrix:

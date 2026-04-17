@@ -22,6 +22,37 @@ class WorkflowParser:
         with open(workflow_file) as f:
             workflow_content = f.read()
         self.workflow = yaml.safe_load(workflow_content)
+        self._validate_matrix_job_names()
+
+    def _validate_matrix_job_names(self) -> None:
+        """Validate that all matrix jobs have dynamic names.
+
+        Because act derives container names from the job name, matrix jobs
+        must include a matrix variable in their name (e.g. ${{ matrix.var }})
+        to prevent container name collisions on the same node.
+
+        Raises
+        ------
+        ValueError
+            If a matrix job lacks a dynamic name.
+        """
+        for job_name, job in self.get_jobs().items():
+            if not isinstance(job, dict):
+                continue
+
+            matrix = job.get("strategy", {}).get("matrix")
+            if not matrix:
+                continue
+
+            job_display_name = job.get("name", "")
+            has_matrix_var = "${{" in job_display_name and "matrix." in job_display_name
+            if not job_display_name or not has_matrix_var:
+                raise ValueError(
+                    f"Job '{job_name}' uses a matrix but lacks a dynamic name. "
+                    "To prevent container collisions, you must provide a 'name:' "
+                    "field that includes a matrix variable "
+                    f"(e.g., 'name: {job_name} ${{{{ matrix.var }}}}')."
+                )
 
     def get_jobs(self) -> Dict[str, Any]:
         """Get all jobs defined in the workflow.

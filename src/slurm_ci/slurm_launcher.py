@@ -1,6 +1,4 @@
-import hashlib
 import os
-import re
 import subprocess
 import time
 from pathlib import Path
@@ -285,27 +283,12 @@ def _launch_single_job(
     print("Writing logfile to: ", status_file.get_logfile_path())
 
     # act derives its container name from "<workflow-name>/<job-name>".  The
-    # matrix values are NOT included, so two combos of the same workflow
-    # produce identical container names and collide on the same node.  Fix by
-    # writing a per-combo copy of the workflow file whose name: field includes
-    # a short hash of the combo dict.
-    combo_hash = hashlib.sha256(str(sorted(combo.items())).encode()).hexdigest()[:8]
-    combo_workflow = Path(workflow_file)
-    combo_workflow_file = str(
-        combo_workflow.parent / f"{combo_workflow.stem}-{combo_hash}.yml"
-    )
-    workflow_text = combo_workflow.read_text()
-    workflow_text = re.sub(
-        r"^(name:\s*.+)$",
-        rf"\1 {combo_hash}",
-        workflow_text,
-        count=1,
-        flags=re.MULTILINE,
-    )
-    Path(combo_workflow_file).write_text(workflow_text)
+    # matrix values are NOT included by default. We enforce that users must
+    # provide a dynamic job name (e.g. `name: Test ${{ matrix.version }}`)
+    # to ensure unique container names and prevent collisions on the same node.
 
-    # Build the main command pointing at the per-combo copy
-    main_command = build_act_command(combo_workflow_file, combo, dryrun)
+    # Build the main command pointing at the original workflow file
+    main_command = build_act_command(workflow_file, combo, dryrun)
 
     # Render the SLURM script
     slurm_script = renderer.render_script(

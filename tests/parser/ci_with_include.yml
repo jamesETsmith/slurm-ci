@@ -1,5 +1,6 @@
 jobs:
   example_matrix:
+    name: example_matrix ${{ matrix.os }} ${{ matrix.version }}
     strategy:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]

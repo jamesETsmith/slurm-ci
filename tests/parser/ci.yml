@@ -2,6 +2,7 @@ name: sample rocm ci
 on: [push]
 jobs:
   test-rocm-versions:
+    name: test-rocm-versions ${{ matrix.rocm_version }} ${{ matrix.gpu_arch }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
