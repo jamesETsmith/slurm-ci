@@ -2,6 +2,7 @@
 """Service management for local slurm-ci support services."""
 
 import json
+import os
 import signal
 import subprocess
 from datetime import datetime
@@ -160,13 +161,24 @@ class ServiceManager:
                 self.cleanup_service_files(service_name)
                 return True
 
-            process.send_signal(signal.SIGTERM)
+            try:
+                pgid = os.getpgid(pid)
+            except OSError:
+                pgid = None
+
+            if pgid and pgid == pid:
+                os.killpg(pgid, signal.SIGTERM)
+            else:
+                process.send_signal(signal.SIGTERM)
             try:
                 process.wait(timeout=timeout)
             except psutil.TimeoutExpired:
                 if not force:
                     return False
-                process.send_signal(signal.SIGKILL)
+                if pgid and pgid == pid:
+                    os.killpg(pgid, signal.SIGKILL)
+                else:
+                    process.send_signal(signal.SIGKILL)
                 process.wait(timeout=5)
 
             self.cleanup_service_files(service_name)

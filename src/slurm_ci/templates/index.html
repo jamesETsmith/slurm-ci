@@ -53,6 +53,16 @@
     {% include "partials/index_summary.html" %}
 </section>
 
+<div class="chart-card">
+    <div class="chart-header">
+        <h3>Job outcomes per build</h3>
+        <small>Last {{ trend_points | length }} build{{ '' if trend_points | length == 1 else 's' }} (newest right)</small>
+    </div>
+    <div class="chart-canvas-wrap">
+        <canvas id="build-outcome-trend"></canvas>
+    </div>
+</div>
+
 <section
     id="table-container"
     hx-get="{{ url_for('index_table_partial') }}"
@@ -66,61 +76,127 @@
 {% block extra_scripts %}
 <script>
     (function () {
-        let trendChart = null;
+        let outcomeChart = null;
 
-        function renderTrendChart() {
-            const canvas = document.getElementById("build-duration-trend");
-            if (!canvas || !window.Chart) return;
-            const labels = JSON.parse(canvas.dataset.labels || "[]");
-            const values = JSON.parse(canvas.dataset.values || "[]");
-            const failedValues = JSON.parse(canvas.dataset.failedValues || "[]");
-
-            if (trendChart) {
-                trendChart.destroy();
+        function readTrendData() {
+            const node = document.getElementById("trend-data");
+            if (!node) return null;
+            try {
+                return {
+                    labels: JSON.parse(node.dataset.labels || "[]"),
+                    passed: JSON.parse(node.dataset.passed || "[]"),
+                    failed: JSON.parse(node.dataset.failed || "[]"),
+                    other: JSON.parse(node.dataset.other || "[]"),
+                    buildIds: JSON.parse(node.dataset.buildIds || "[]"),
+                };
+            } catch (err) {
+                return null;
             }
+        }
+
+        function ensureChart() {
+            const canvas = document.getElementById("build-outcome-trend");
+            if (!canvas || !window.Chart) return null;
+            if (outcomeChart) return outcomeChart;
 
             Chart.defaults.color = "#8b949e";
             Chart.defaults.borderColor = "#30363d";
 
-            trendChart = new Chart(canvas, {
+            outcomeChart = new Chart(canvas, {
+                type: "bar",
                 data: {
-                    labels: labels,
+                    labels: [],
                     datasets: [
                         {
-                            type: "line",
-                            label: "Avg job duration (s)",
-                            data: values,
-                            borderColor: "#58a6ff",
-                            backgroundColor: "rgba(88,166,255,0.1)",
-                            yAxisID: "y"
+                            label: "Passed",
+                            data: [],
+                            backgroundColor: "rgba(63,185,80,0.75)",
+                            borderColor: "#3fb950",
+                            borderWidth: 1,
+                            stack: "jobs"
                         },
                         {
-                            type: "bar",
-                            label: "Failed jobs",
-                            data: failedValues,
-                            backgroundColor: "rgba(248,81,73,0.25)",
+                            label: "Failed",
+                            data: [],
+                            backgroundColor: "rgba(248,81,73,0.85)",
                             borderColor: "#f85149",
-                            yAxisID: "y1"
+                            borderWidth: 1,
+                            stack: "jobs"
+                        },
+                        {
+                            label: "Other",
+                            data: [],
+                            backgroundColor: "rgba(139,148,158,0.55)",
+                            borderColor: "#8b949e",
+                            borderWidth: 1,
+                            stack: "jobs"
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    animation: { duration: 0 },
-                    plugins: { legend: { position: "bottom", labels: { color: "#8b949e" } } },
+                    animation: false,
+                    interaction: { mode: "index", intersect: false },
+                    plugins: {
+                        legend: { position: "bottom", labels: { color: "#8b949e" } },
+                        tooltip: {
+                            callbacks: {
+                                footer: function (items) {
+                                    if (!items || !items.length) return "";
+                                    const total = items.reduce(function (acc, it) {
+                                        return acc + (it.parsed.y || 0);
+                                    }, 0);
+                                    return "Total jobs: " + total;
+                                }
+                            }
+                        }
+                    },
                     scales: {
-                        y: { beginAtZero: true, ticks: { color: "#8b949e" }, grid: { color: "#21262d" }, title: { display: true, text: "Seconds", color: "#8b949e" } },
-                        y1: { beginAtZero: true, position: "right", ticks: { color: "#8b949e" }, grid: { drawOnChartArea: false, color: "#21262d" }, title: { display: true, text: "Failures", color: "#8b949e" } }
+                        x: {
+                            stacked: true,
+                            ticks: { color: "#8b949e" },
+                            grid: { color: "#21262d" }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: { color: "#8b949e", precision: 0 },
+                            grid: { color: "#21262d" },
+                            title: { display: true, text: "Jobs", color: "#8b949e" }
+                        }
+                    },
+                    onClick: function (_evt, elements) {
+                        if (!elements || !elements.length) return;
+                        const data = readTrendData();
+                        if (!data) return;
+                        const idx = elements[0].index;
+                        const buildId = data.buildIds[idx];
+                        if (buildId != null) {
+                            window.location.href = "/build/" + buildId;
+                        }
                     }
                 }
             });
+            return outcomeChart;
         }
 
-        document.addEventListener("DOMContentLoaded", renderTrendChart);
+        function refreshOutcomeChart() {
+            const chart = ensureChart();
+            if (!chart) return;
+            const data = readTrendData();
+            if (!data) return;
+            chart.data.labels = data.labels;
+            chart.data.datasets[0].data = data.passed;
+            chart.data.datasets[1].data = data.failed;
+            chart.data.datasets[2].data = data.other;
+            chart.update("none");
+        }
+
+        document.addEventListener("DOMContentLoaded", refreshOutcomeChart);
         document.body.addEventListener("htmx:afterSwap", function (event) {
             if (event.target && event.target.id === "summary-container") {
-                renderTrendChart();
+                refreshOutcomeChart();
             }
         });
     })();

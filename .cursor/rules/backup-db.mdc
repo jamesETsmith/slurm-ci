@@ -1,0 +1,25 @@
+---
+description: Always back up databases before modifying or deleting them
+globs: *
+alwaysApply: true
+---
+
+# Database Modification Safety
+
+When asked to modify, delete, or recreate a database file (e.g., `.db`, `.sqlite`, `.sqlite3`), you MUST always create a backup of the database file first.
+
+## Rules
+- Before running commands like `rm`, `sqlite3`, or Python scripts that drop/recreate tables on a database file, copy the file to a backup location (e.g., `cp database.db database.db.bak`).
+- If the user asks you to "nuke", "reset", or "clear" the database, still create a backup first unless they explicitly say "do not back it up".
+- Inform the user that you have created a backup and where it is located.
+
+## Example
+
+```bash
+# ❌ BAD
+rm -f ~/.slurm-ci/slurm_ci.db
+
+# ✅ GOOD
+cp ~/.slurm-ci/slurm_ci.db ~/.slurm-ci/slurm_ci.db.bak
+rm -f ~/.slurm-ci/slurm_ci.db
+```

@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 from pathlib import Path
@@ -8,6 +9,10 @@ from sqlalchemy.orm import joinedload
 
 from .config import STATUS_DIR
 from .database import Build, Job, SessionLocal
+
+
+TREND_WINDOW = 20
+TERMINAL_BUILD_STATUSES = ("completed", "failed")
 
 
 # Get the directory where this file is located
@@ -47,10 +52,80 @@ def basename_filter(path: str) -> str:
     return os.path.basename(path)
 
 
+def format_duration_filter(seconds: float | int | None) -> str:
+    """Format a duration in seconds as a short human-readable string."""
+    if seconds is None:
+        return "\u2014"
+    try:
+        s = float(seconds)
+    except (TypeError, ValueError):
+        return "\u2014"
+    if s < 0:
+        return "\u2014"
+    if s < 1:
+        return f"{s * 1000:.0f} ms"
+    if s < 60:
+        return f"{s:.1f} s"
+    minutes, sec = divmod(int(round(s)), 60)
+    if minutes < 60:
+        return f"{minutes}m {sec:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes:02d}m"
+
+
+def format_percent_filter(value: float | None) -> str:
+    """Format a fractional or 0-100 percent value as ``XX.X %``."""
+    if value is None:
+        return "\u2014"
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return "\u2014"
+    return f"{v:.1f}%"
+
+
 # Register custom filters with Jinja2
 app.jinja_env.filters["format_json"] = format_json_filter
 app.jinja_env.filters["timestamp_to_datetime"] = timestamp_to_datetime_filter
 app.jinja_env.filters["basename"] = basename_filter
+app.jinja_env.filters["format_duration"] = format_duration_filter
+app.jinja_env.filters["format_percent"] = format_percent_filter
+
+
+def _percentile(values: list[float], q: float) -> float | None:
+    """Return the linear-interpolation percentile (q in [0, 1])."""
+    if not values:
+        return None
+    s = sorted(values)
+    if len(s) == 1:
+        return s[0]
+    k = (len(s) - 1) * q
+    lo = int(k)
+    hi = min(lo + 1, len(s) - 1)
+    if lo == hi:
+        return s[lo]
+    return s[lo] + (s[hi] - s[lo]) * (k - lo)
+
+
+def _build_duration_seconds(build: object) -> float | None:
+    """Wall-clock duration of a build's job set, or ``None`` if unknown."""
+    starts = []
+    ends = []
+    for job in getattr(build, "jobs", []) or []:
+        if job.start_time is not None:
+            starts.append(job.start_time)
+        if job.end_time is not None:
+            ends.append(job.end_time)
+    if not starts or not ends:
+        return None
+    try:
+        delta = max(ends) - min(starts)
+    except TypeError:
+        return None
+    seconds = delta.total_seconds() if hasattr(delta, "total_seconds") else None
+    if seconds is None or seconds < 0:
+        return None
+    return seconds
 
 
 def _build_status_from_entry(entry: dict) -> str:
@@ -99,22 +174,59 @@ def _load_builds_context() -> dict:
             status_counts[build_status] += 1
 
     trend_points = []
-    for build in reversed(builds[:20]):
-        durations = []
+    for build in reversed(builds[:TREND_WINDOW]):
+        passed = 0
+        failed = 0
+        other = 0
         for job in build.jobs:
-            if job.start_time and job.end_time:
-                durations.append((job.end_time - job.start_time).total_seconds())
+            job_status = str(job.status) if job.status is not None else ""
+            if job_status == "completed":
+                passed += 1
+            elif job_status == "failed":
+                failed += 1
+            else:
+                other += 1
         trend_points.append(
             {
                 "label": f"#{build.id}",
-                "avg_duration_s": round(sum(durations) / len(durations), 1)
-                if durations
-                else 0,
-                "failed_jobs": len(
-                    [job for job in build.jobs if job.status == "failed"]
-                ),
+                "build_id": build.id,
+                "passed": passed,
+                "failed": failed,
+                "other": other,
             }
         )
+
+    completed_n = sum(1 for b in builds if str(b.status) == "completed")
+    failed_n = sum(1 for b in builds if str(b.status) == "failed")
+    terminal_total = completed_n + failed_n
+    success_rate = (
+        (completed_n / terminal_total * 100.0) if terminal_total > 0 else None
+    )
+
+    durations: list[float] = []
+    for build in builds:
+        if str(build.status) not in TERMINAL_BUILD_STATUSES:
+            continue
+        d = _build_duration_seconds(build)
+        if d is not None:
+            durations.append(d)
+
+    now = datetime.datetime.utcnow()
+    runs_last_24h = 0
+    for build in builds:
+        created = getattr(build, "created_at", None)
+        if isinstance(created, datetime.datetime):
+            if (now - created).total_seconds() <= 86400:
+                runs_last_24h += 1
+
+    kpis = {
+        "success_rate": success_rate,
+        "p50_duration_s": _percentile(durations, 0.5),
+        "p95_duration_s": _percentile(durations, 0.95),
+        "runs_last_24h": runs_last_24h,
+        "terminal_total": terminal_total,
+        "duration_sample_size": len(durations),
+    }
 
     # Build options should remain global so users can pivot quickly.
     db = SessionLocal()
@@ -142,6 +254,7 @@ def _load_builds_context() -> dict:
             "last_update": builds[0].created_at if builds else None,
         },
         "trend_points": trend_points,
+        "kpis": kpis,
         "filters": {
             "status": status,
             "branch": branch,

@@ -25,16 +25,40 @@
     </div>
 </div>
 
+<div class="summary-grid kpi-grid">
+    <div class="summary-card">
+        <div class="summary-label" title="Completed / (completed + failed) over visible builds">Success rate</div>
+        <div class="summary-value">{{ kpis.success_rate | format_percent }}</div>
+        <div class="summary-sub">over {{ kpis.terminal_total }} finished</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label" title="Median wall-clock duration of finished builds">p50 duration</div>
+        <div class="summary-value">{{ kpis.p50_duration_s | format_duration }}</div>
+        <div class="summary-sub">{{ kpis.duration_sample_size }} sample{{ '' if kpis.duration_sample_size == 1 else 's' }}</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label" title="95th-percentile wall-clock duration of finished builds">p95 duration</div>
+        <div class="summary-value">{{ kpis.p95_duration_s | format_duration }}</div>
+        <div class="summary-sub">tail latency</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label" title="Builds created in the last 24 hours (within the current filter)">Runs / 24h</div>
+        <div class="summary-value">{{ kpis.runs_last_24h }}</div>
+        <div class="summary-sub">throughput</div>
+    </div>
+</div>
+
 {% if summary.last_update %}
 <p><small>Last update: {{ summary.last_update.strftime('%Y-%m-%d %H:%M:%S') }} UTC</small></p>
 {% else %}
 <p><small>No build data available.</small></p>
 {% endif %}
 
-<div style="position:relative; height:200px; width:100%;">
-    <canvas
-        id="build-duration-trend"
-        data-labels='{{ trend_points | map(attribute="label") | list | tojson }}'
-        data-values='{{ trend_points | map(attribute="avg_duration_s") | list | tojson }}'
-        data-failed-values='{{ trend_points | map(attribute="failed_jobs") | list | tojson }}'></canvas>
-</div>
+<div
+    id="trend-data"
+    style="display:none;"
+    data-labels='{{ trend_points | map(attribute="label") | list | tojson }}'
+    data-passed='{{ trend_points | map(attribute="passed") | list | tojson }}'
+    data-failed='{{ trend_points | map(attribute="failed") | list | tojson }}'
+    data-other='{{ trend_points | map(attribute="other") | list | tojson }}'
+    data-build-ids='{{ trend_points | map(attribute="build_id") | list | tojson }}'></div>
