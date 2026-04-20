@@ -143,7 +143,11 @@ class RefPatternSet:
 
     @classmethod
     def from_branch(
-        cls, branch: str, *, match_style: MatchStyle = _DEFAULT_MATCH_STYLE
+        cls,
+        branch: str,
+        *,
+        exclude: Iterable[str] = (),
+        match_style: MatchStyle = _DEFAULT_MATCH_STYLE,
     ) -> "RefPatternSet":
         """Create a pattern set from a single legacy branch string.
 
@@ -151,20 +155,27 @@ class RefPatternSet:
         are expanded to ``refs/heads/<branch>``; fully-qualified refs pass
         through unchanged.
         """
-        return cls(include=(normalize_ref(branch),), match_style=match_style)
+        exclude_tuple = _dedupe(normalize_ref(p) for p in exclude)
+        return cls(
+            include=(normalize_ref(branch),),
+            exclude=exclude_tuple,
+            match_style=match_style,
+        )
 
     @classmethod
     def from_branches(
         cls,
         branches: Iterable[str],
         *,
+        exclude: Iterable[str] = (),
         match_style: MatchStyle = _DEFAULT_MATCH_STYLE,
     ) -> "RefPatternSet":
         """Create a pattern set from a list of branch/ref strings."""
         include = tuple(normalize_ref(b) for b in branches)
         if not include:
             raise ValueError("'branches' must contain at least one entry")
-        return cls(include=include, match_style=match_style)
+        exclude_tuple = _dedupe(normalize_ref(p) for p in exclude)
+        return cls(include=include, exclude=exclude_tuple, match_style=match_style)
 
     @classmethod
     def from_refs(

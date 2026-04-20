@@ -288,6 +288,121 @@ class TestRefsTable:
         assert config.branch_label() == "release/* !(release/*-rc*)"
 
 
+class TestExcludeWithBranches:
+    """Tests for exclude working with branch/branches (not just refs)."""
+
+    def _base(self, **repo_overrides: object) -> dict:
+        repo: dict[str, object] = {"url": "https://github.com/user/repo"}
+        repo.update(repo_overrides)
+        return {
+            "daemon": {"name": "d"},
+            "repository": repo,
+            "slurm-ci": {
+                "workflow_file": "w.yml",
+                "working_directory": "/tmp",
+            },
+        }
+
+    def test_exclude_with_branches(self) -> None:
+        config = GitWatchConfig.from_dict(
+            self._base(branches=["*amd*", "*perf*"], exclude=["hp/**"])
+        )
+        assert config.refs_exclude == ["hp/**"]
+        patterns = config.ref_patterns()
+        assert patterns.exclude == ("refs/heads/hp/**",)
+        assert patterns.matches("refs/heads/amd-integration")
+        assert not patterns.matches("refs/heads/hp/amd-test")
+
+    def test_exclude_with_scalar_branch(self) -> None:
+        config = GitWatchConfig.from_dict(self._base(branch="*amd*", exclude=["hp/**"]))
+        patterns = config.ref_patterns()
+        assert patterns.exclude == ("refs/heads/hp/**",)
+        assert patterns.matches("refs/heads/amd-integration")
+        assert not patterns.matches("refs/heads/hp/amd-test")
+
+    def test_match_style_with_branches(self) -> None:
+        config = GitWatchConfig.from_dict(
+            self._base(
+                branches=["release/*"],
+                exclude=["release/*-rc*"],
+                match_style="git",
+            )
+        )
+        assert config.match_style == "git"
+        patterns = config.ref_patterns()
+        assert patterns.matches("refs/heads/release/1.0")
+        assert not patterns.matches("refs/heads/release/1.0-rc1")
+        assert not patterns.matches("refs/heads/release/1.0/hotfix")
+
+    def test_branch_label_includes_exclude(self) -> None:
+        config = GitWatchConfig.from_dict(
+            self._base(branches=["*amd*"], exclude=["hp/**"])
+        )
+        assert config.branch_label() == "*amd* !(hp/**)"
+
+    def test_exclude_invalid_type_rejected(self) -> None:
+        with pytest.raises(ValueError, match="repository.exclude"):
+            GitWatchConfig.from_dict(
+                self._base(branches=["main"], exclude="not-a-list")
+            )
+
+    def test_exclude_with_refs_table_is_rejected(self) -> None:
+        """Top-level exclude cannot be combined with [repository.refs]."""
+        with pytest.raises(ValueError, match="cannot be used together"):
+            GitWatchConfig.from_dict(
+                {
+                    "daemon": {"name": "d"},
+                    "repository": {
+                        "url": "https://github.com/user/repo",
+                        "refs": {"include": ["main"]},
+                        "exclude": ["hp/**"],
+                    },
+                    "slurm-ci": {
+                        "workflow_file": "w.yml",
+                        "working_directory": "/tmp",
+                    },
+                }
+            )
+
+
+class TestUnknownKeyRejection:
+    """Tests that unknown keys in [repository] raise errors."""
+
+    def test_unknown_key_rejected(self) -> None:
+        with pytest.raises(ValueError, match="Unknown key.*typo_key"):
+            GitWatchConfig.from_dict(
+                {
+                    "daemon": {"name": "d"},
+                    "repository": {
+                        "url": "https://github.com/user/repo",
+                        "branch": "main",
+                        "typo_key": "oops",
+                    },
+                    "slurm-ci": {
+                        "workflow_file": "w.yml",
+                        "working_directory": "/tmp",
+                    },
+                }
+            )
+
+    def test_misplaced_exclude_as_exlude_rejected(self) -> None:
+        with pytest.raises(ValueError, match="Unknown key.*exlude"):
+            GitWatchConfig.from_dict(
+                {
+                    "daemon": {"name": "d"},
+                    "repository": {
+                        "url": "https://github.com/user/repo",
+                        "branches": ["main"],
+                        "exlude": ["hp/**"],
+                    },
+                    "slurm-ci": {
+                        "workflow_file": "w.yml",
+                        "working_directory": "/tmp",
+                    },
+                }
+            )
+
+
 class TestMutualExclusivity:
     def test_branch_and_branches_rejected(self) -> None:
         with pytest.raises(ValueError, match="at most one"):

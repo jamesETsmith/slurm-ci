@@ -95,6 +95,24 @@ class GitWatchConfig:
                 f"Missing required configuration fields: {', '.join(missing_fields)}"
             )
 
+        # Reject unknown keys so typos and misplaced options are never
+        # silently ignored.
+        _KNOWN_REPO_KEYS = {
+            "url",
+            "branch",
+            "branches",
+            "refs",
+            "exclude",
+            "match_style",
+            "github_token",
+        }
+        unknown = set(repo_config) - _KNOWN_REPO_KEYS
+        if unknown:
+            raise ValueError(
+                f"Unknown key(s) in [repository]: {', '.join(sorted(unknown))}. "
+                f"Allowed keys: {', '.join(sorted(_KNOWN_REPO_KEYS))}"
+            )
+
         branch_scalar = repo_config.get("branch")
         branches_list = repo_config.get("branches")
         refs_table = repo_config.get("refs")
@@ -114,11 +132,29 @@ class GitWatchConfig:
                 f"'repository.branches', or 'repository.refs'; got: {specified}"
             )
 
+        # Top-level exclude/match_style apply to branch and branches forms.
+        # When using [repository.refs], these are read from that subtable
+        # instead and top-level values are rejected as ambiguous.
+        top_exclude = repo_config.get("exclude")
+        top_match_style = repo_config.get("match_style")
+
         refs_include: Optional[List[str]] = None
         refs_exclude: List[str] = []
         match_style: MatchStyle = "fnmatch"
 
         if refs_table is not None:
+            if top_exclude is not None:
+                raise ValueError(
+                    "'repository.exclude' cannot be used together with "
+                    "'repository.refs'; put excludes inside [repository.refs] instead"
+                )
+            if top_match_style is not None:
+                raise ValueError(
+                    "'repository.match_style' cannot be used together "
+                    "with 'repository.refs'; put match_style inside "
+                    "[repository.refs] instead"
+                )
+
             if not isinstance(refs_table, dict):
                 raise ValueError("'repository.refs' must be a table")
             include = refs_table.get("include")
@@ -145,6 +181,22 @@ class GitWatchConfig:
                     "expected 'fnmatch' or 'git'"
                 )
             match_style = style_raw
+        else:
+            # Parse top-level exclude (works with branch / branches)
+            if top_exclude is not None:
+                if not isinstance(top_exclude, list) or not all(
+                    isinstance(p, str) for p in top_exclude
+                ):
+                    raise ValueError("'repository.exclude' must be a list of strings")
+                refs_exclude = [str(p) for p in top_exclude]
+
+            if top_match_style is not None:
+                if top_match_style not in ("fnmatch", "git"):
+                    raise ValueError(
+                        f"Unknown 'repository.match_style' {top_match_style!r}; "
+                        "expected 'fnmatch' or 'git'"
+                    )
+                match_style = top_match_style
 
         normalized_branches: Optional[List[str]] = None
         if branches_list is not None:
@@ -176,6 +228,7 @@ class GitWatchConfig:
 
         Precedence: ``refs.include`` > ``branches`` > ``branch``. Exactly one
         of these is populated in practice, enforced by :meth:`from_dict`.
+        Excludes are forwarded for all three forms.
         """
         if self.refs_include:
             return RefPatternSet.from_refs(
@@ -185,9 +238,15 @@ class GitWatchConfig:
             )
         if self.branches:
             return RefPatternSet.from_branches(
-                self.branches, match_style=self.match_style
+                self.branches,
+                exclude=self.refs_exclude,
+                match_style=self.match_style,
             )
-        return RefPatternSet.from_branch(self.branch, match_style=self.match_style)
+        return RefPatternSet.from_branch(
+            self.branch,
+            exclude=self.refs_exclude,
+            match_style=self.match_style,
+        )
 
     def branch_label(self) -> str:
         """Return a human-readable summary of the watched refs.
@@ -198,12 +257,14 @@ class GitWatchConfig:
         """
         if self.refs_include:
             label = ",".join(self.refs_include)
-            if self.refs_exclude:
-                label = f"{label} !({','.join(self.refs_exclude)})"
-            return label
-        if self.branches:
-            return ",".join(self.branches)
-        return self.branch
+        elif self.branches:
+            label = ",".join(self.branches)
+        else:
+            label = self.branch
+
+        if self.refs_exclude:
+            label = f"{label} !({','.join(self.refs_exclude)})"
+        return label
 
     def validate(self) -> None:
         """Validate the configuration."""

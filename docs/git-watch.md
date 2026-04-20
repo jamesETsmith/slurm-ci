@@ -47,6 +47,12 @@ workflow_file = "workflows/ci.yml"
   Mutually exclusive with `branch` and `branches`. See *Branch patterns* below.
 - `github_token`: Personal access token for private repos or higher rate limits (optional)
 
+- `exclude`: List of patterns to exclude from matching. Works with all three
+  ref selection forms (`branch`, `branches`, and `refs`).
+- `match_style`: Either `"fnmatch"` (default) or `"git"`. Works with all three
+  forms. When using `[repository.refs]`, put `exclude` and `match_style` inside
+  the `refs` table instead.
+
 ##### Branch patterns
 
 Each poll runs a single `git ls-remote` with the configured include patterns
@@ -54,7 +60,7 @@ and filters the returned refs locally. Every matching ref produces an
 independent CI run (subject to the existing commit-tracker dedup, so each
 unique commit SHA is still only triggered once).
 
-Two match styles are available, controlled by `refs.match_style`:
+Two match styles are available, controlled by `match_style`:
 
 | Style       | `*` behavior                  | `**` behavior             | Default |
 |-------------|-------------------------------|---------------------------|---------|
@@ -64,25 +70,27 @@ Two match styles are available, controlled by `refs.match_style`:
 `fnmatch` is the default for backward compatibility with existing configs
 that used patterns like `release/*`.
 
-Examples:
+##### Excludes
+
+`exclude` filters out refs that would otherwise match the include patterns.
+It works with all three ref selection forms:
 
 ```toml
-# Single pattern (legacy form)
+# Scalar branch with exclude
 [repository]
-branch = "release/*"
+branch = "*amd*"
+exclude = ["hp/**"]
 ```
 
 ```toml
-# Multiple patterns
+# Branches list with exclude
 [repository]
-branches = ["main", "release/*"]
+branches = ["*amd*", "*perf*"]
+exclude = ["hp/**"]
 ```
 
 ```toml
-# Include/exclude with git-style matching
-[repository]
-url = "https://github.com/user/repo"
-
+# Refs table form (exclude goes inside the table)
 [repository.refs]
 include = ["main", "refs/tags/v*"]
 exclude = ["release/*-rc*"]
@@ -91,6 +99,17 @@ match_style = "git"
 
 With `match_style = "git"`, `release/*` matches `release/1.0` but not
 `release/1.0/hotfix`; use `release/**` to cover nested segments.
+
+> **Note**: Unknown keys in `[repository]` cause a startup error, so
+> typos like `exlude` or misplaced options are never silently ignored.
+
+##### Workflow file change detection
+
+The git watcher hashes the workflow file on each poll cycle. If the file
+content changes, all previously-completed commits are re-triggered
+automatically -- there is no need to clear the database or restart the
+daemon. This means you can iterate on a workflow YAML and the watcher will
+re-run jobs for the current branch heads.
 
 #### `[slurm-ci]` section
 - `config_dir`: Directory containing slurm-ci configuration files (required)

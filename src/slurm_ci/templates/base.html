@@ -488,12 +488,19 @@
                         dtInstances.get(key).destroy();
                         dtInstances.delete(key);
                     }
-                    const instance = new simpleDatatables.DataTable(table, {
+                    const opts = {
                         perPage: Number(table.dataset.perPage || 25),
                         perPageSelect: [10, 25, 50, 100],
                         searchable: table.dataset.searchable !== "false",
                         fixedHeight: false
-                    });
+                    };
+                    if (table.dataset.sortColumn) {
+                        opts.columns = [{
+                            select: Number(table.dataset.sortColumn),
+                            sort: table.dataset.sortDir || "desc"
+                        }];
+                    }
+                    const instance = new simpleDatatables.DataTable(table, opts);
                     dtInstances.set(key, instance);
                 });
             }
