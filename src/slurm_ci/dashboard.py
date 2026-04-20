@@ -37,14 +37,37 @@ def format_json_filter(json_string: str) -> str:
 
 
 def timestamp_to_datetime_filter(timestamp: float) -> str:
-    """Convert Unix timestamp to readable UTC datetime string."""
-    from datetime import datetime, timezone
+    """Convert Unix timestamp to a readable Eastern Time (NYC) datetime string."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
 
     try:
-        dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+        tz_et = ZoneInfo("America/New_York")
+        dt = datetime.fromtimestamp(timestamp, tz=tz_et)
+        suffix = "EDT" if dt.dst() else "EST"
+        return dt.strftime(f"%Y-%m-%d %H:%M:%S {suffix}")
     except (ValueError, TypeError, OSError):
         return str(timestamp)
+
+
+def to_eastern_filter(
+    dt: datetime.datetime | None, fmt: str = "%Y-%m-%d %H:%M:%S"
+) -> str:
+    """Convert a naive-UTC datetime to an Eastern Time string."""
+    from zoneinfo import ZoneInfo
+
+    if dt is None:
+        return "—"
+    try:
+        tz_utc = ZoneInfo("UTC")
+        tz_et = ZoneInfo("America/New_York")
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tz_utc)
+        dt_et = dt.astimezone(tz_et)
+        suffix = "EDT" if dt_et.dst() else "EST"
+        return dt_et.strftime(f"{fmt} {suffix}")
+    except (ValueError, TypeError, OSError):
+        return str(dt)
 
 
 def basename_filter(path: str) -> str:
@@ -90,6 +113,7 @@ app.jinja_env.filters["timestamp_to_datetime"] = timestamp_to_datetime_filter
 app.jinja_env.filters["basename"] = basename_filter
 app.jinja_env.filters["format_duration"] = format_duration_filter
 app.jinja_env.filters["format_percent"] = format_percent_filter
+app.jinja_env.filters["to_eastern"] = to_eastern_filter
 
 
 def _percentile(values: list[float], q: float) -> float | None:

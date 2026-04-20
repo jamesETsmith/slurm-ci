@@ -47,11 +47,12 @@
 <table id="logs-table" class="centered-table" data-datatable="true" data-per-page="25">
     <thead>
         <tr>
-            <th style="width:35%">Job</th>
-            <th style="width:20%">Matrix</th>
-            <th style="width:10%">Slurm ID</th>
-            <th style="width:15%">Duration</th>
-            <th style="width:20%">Links</th>
+            <th style="width:30%">Job</th>
+            <th style="width:18%">Matrix</th>
+            <th style="width:8%">Slurm ID</th>
+            <th style="width:16%">Started (ET)</th>
+            <th style="width:10%">Duration</th>
+            <th style="width:18%">Links</th>
         </tr>
     </thead>
     <tbody>
@@ -88,10 +89,17 @@
             <td>{{ entry.slurm_job_id if entry.slurm_job_id else '-' }}</td>
             <td>
                 <span class="cell-sub">
+                {% if entry.start_time %}
+                    {{ entry.start_time | int | timestamp_to_datetime }}
+                {% else %}
+                    -
+                {% endif %}
+                </span>
+            </td>
+            <td>
+                <span class="cell-sub">
                 {% if entry.start_time and entry.end_time %}
                     {{ "%.0f"|format(entry.end_time - entry.start_time) }}s
-                {% elif entry.start_time %}
-                    {{ entry.start_time | int | timestamp_to_datetime }}
                 {% else %}
                     -
                 {% endif %}
@@ -107,7 +115,7 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="5">No logs found in status directory.</td>
+            <td colspan="6">No logs found in status directory.</td>
         </tr>
         {% endfor %}
     </tbody>

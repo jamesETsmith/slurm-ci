@@ -391,6 +391,173 @@ class TestGitWatcherShouldProcessCommit:
         assert should_process is True
 
 
+class TestWorkflowHashRetrigger:
+    """Tests for workflow-hash-based retriggering."""
+
+    @patch("slurm_ci.git_watcher.init_db")
+    @patch("slurm_ci.git_watcher.SessionLocal")
+    @patch("slurm_ci.git_watcher.DaemonManager")
+    def test_completed_commit_skipped_when_hash_matches(
+        self,
+        mock_dm: Mock,
+        mock_session_class: Mock,
+        mock_init_db: Mock,
+        sample_config: GitWatchConfig,
+    ) -> None:
+        """A completed commit with a matching workflow hash is not re-triggered."""
+        mock_session = Mock()
+        mock_session_class.return_value = mock_session
+
+        mock_repo = Mock()
+        mock_repo.id = 1
+
+        mock_tracker = Mock()
+        mock_tracker.status = CommitStatus.COMPLETED.value
+        mock_tracker.workflow_hash = "abc123"
+
+        mock_query = Mock()
+        mock_query.filter.return_value.first.side_effect = [
+            None,
+            mock_repo,
+            mock_tracker,
+        ]
+        mock_session.query.return_value = mock_query
+
+        watcher = GitWatcher(sample_config)
+        assert watcher._should_process_commit("sha1", workflow_hash="abc123") is False
+
+    @patch("slurm_ci.git_watcher.init_db")
+    @patch("slurm_ci.git_watcher.SessionLocal")
+    @patch("slurm_ci.git_watcher.DaemonManager")
+    def test_completed_commit_retriggered_when_hash_differs(
+        self,
+        mock_dm: Mock,
+        mock_session_class: Mock,
+        mock_init_db: Mock,
+        sample_config: GitWatchConfig,
+    ) -> None:
+        """A completed commit is re-triggered when the workflow hash changes."""
+        mock_session = Mock()
+        mock_session_class.return_value = mock_session
+
+        mock_repo = Mock()
+        mock_repo.id = 1
+
+        mock_tracker = Mock()
+        mock_tracker.status = CommitStatus.COMPLETED.value
+        mock_tracker.workflow_hash = "old_hash"
+
+        mock_query = Mock()
+        mock_query.filter.return_value.first.side_effect = [
+            None,
+            mock_repo,
+            mock_tracker,
+        ]
+        mock_session.query.return_value = mock_query
+
+        watcher = GitWatcher(sample_config)
+        assert watcher._should_process_commit("sha1", workflow_hash="new_hash") is True
+
+    @patch("slurm_ci.git_watcher.init_db")
+    @patch("slurm_ci.git_watcher.SessionLocal")
+    @patch("slurm_ci.git_watcher.DaemonManager")
+    def test_null_stored_hash_triggers_reprocess(
+        self,
+        mock_dm: Mock,
+        mock_session_class: Mock,
+        mock_init_db: Mock,
+        sample_config: GitWatchConfig,
+    ) -> None:
+        """Legacy rows with NULL workflow_hash are re-triggered."""
+        mock_session = Mock()
+        mock_session_class.return_value = mock_session
+
+        mock_repo = Mock()
+        mock_repo.id = 1
+
+        mock_tracker = Mock()
+        mock_tracker.status = CommitStatus.COMPLETED.value
+        mock_tracker.workflow_hash = None
+
+        mock_query = Mock()
+        mock_query.filter.return_value.first.side_effect = [
+            None,
+            mock_repo,
+            mock_tracker,
+        ]
+        mock_session.query.return_value = mock_query
+
+        watcher = GitWatcher(sample_config)
+        assert watcher._should_process_commit("sha1", workflow_hash="any_hash") is True
+
+    @patch("slurm_ci.git_watcher.init_db")
+    @patch("slurm_ci.git_watcher.SessionLocal")
+    @patch("slurm_ci.git_watcher.DaemonManager")
+    def test_no_hash_provided_skips_hash_check(
+        self,
+        mock_dm: Mock,
+        mock_session_class: Mock,
+        mock_init_db: Mock,
+        sample_config: GitWatchConfig,
+    ) -> None:
+        """When workflow_hash is None (file unreadable), fall back to status-only."""
+        mock_session = Mock()
+        mock_session_class.return_value = mock_session
+
+        mock_repo = Mock()
+        mock_repo.id = 1
+
+        mock_tracker = Mock()
+        mock_tracker.status = CommitStatus.COMPLETED.value
+        mock_tracker.workflow_hash = "old_hash"
+
+        mock_query = Mock()
+        mock_query.filter.return_value.first.side_effect = [
+            None,
+            mock_repo,
+            mock_tracker,
+        ]
+        mock_session.query.return_value = mock_query
+
+        watcher = GitWatcher(sample_config)
+        assert watcher._should_process_commit("sha1", workflow_hash=None) is False
+
+    def test_compute_workflow_hash(
+        self,
+        sample_config: GitWatchConfig,
+        mock_database: Mock,
+        mock_daemon_manager: Mock,
+    ) -> None:
+        """Hash is deterministic and changes when file content changes."""
+        watcher = GitWatcher(sample_config)
+        wf_path = Path(sample_config.workflow_file)
+
+        hash1 = watcher._compute_workflow_hash()
+        assert hash1 is not None
+        assert len(hash1) == 64  # SHA-256 hex digest length
+
+        # Same content produces same hash
+        assert watcher._compute_workflow_hash() == hash1
+
+        # Different content produces different hash
+        wf_path.write_text("name: changed\njobs:\n  build:\n    runs-on: ubuntu")
+        hash2 = watcher._compute_workflow_hash()
+        assert hash2 is not None
+        assert hash2 != hash1
+
+    def test_compute_workflow_hash_missing_file(
+        self,
+        sample_config: GitWatchConfig,
+        mock_database: Mock,
+        mock_daemon_manager: Mock,
+        tmp_path: Path,
+    ) -> None:
+        """Returns None when the workflow file is missing."""
+        sample_config.workflow_file = str(tmp_path / "missing.yml")
+        watcher = GitWatcher(sample_config)
+        assert watcher._compute_workflow_hash() is None
+
+
 class TestGitWatcherUpdateCommitStatus:
     """Tests for updating commit status."""
 

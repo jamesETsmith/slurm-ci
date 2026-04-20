@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Git repository watcher for automatic CI triggering."""
 
+import hashlib
 import logging
 import os
 import subprocess
@@ -146,6 +147,15 @@ class GitWatcher:
         """Return the single ref pattern for ls-remote (legacy helper)."""
         return self._ref_patterns().ls_remote_args()[0]
 
+    def _compute_workflow_hash(self) -> Optional[str]:
+        """Return SHA-256 hex digest of the workflow file contents, or None."""
+        try:
+            content = Path(self.config.workflow_file).read_bytes()
+            return hashlib.sha256(content).hexdigest()
+        except OSError as e:
+            self.logger.warning(f"Cannot hash workflow file: {e}")
+            return None
+
     def _fetch_latest_commits(self) -> list[tuple[str, str]]:
         """Fetch latest commit SHAs and short ref names matching the config.
 
@@ -190,8 +200,17 @@ class GitWatcher:
             return None
         return commits[0][0]
 
-    def _should_process_commit(self, commit_sha: str) -> bool:
-        """Check if a commit should be processed based on its current status."""
+    def _should_process_commit(
+        self,
+        commit_sha: str,
+        workflow_hash: Optional[str] = None,
+    ) -> bool:
+        """Check if a commit should be processed.
+
+        A commit is eligible when it has never been seen, is in a
+        retryable state (pending / exception), or when the workflow
+        file has changed since the last run (hash mismatch).
+        """
         session = SessionLocal()
         try:
             repo = (
@@ -219,7 +238,6 @@ class GitWatcher:
                 self.logger.info(f"New commit detected, will process: {commit_sha}")
                 return True
 
-            # Check status to determine if we should process
             status = tracker.status
             self.logger.info(f"Commit {commit_sha} has status: {status}")
 
@@ -234,6 +252,14 @@ class GitWatcher:
                 CommitStatus.COMPLETED.value,
                 CommitStatus.FAILED.value,
             ]:
+                stored_hash = tracker.workflow_hash
+                if workflow_hash is not None and stored_hash != workflow_hash:
+                    self.logger.info(
+                        f"Workflow file changed for commit {commit_sha} "
+                        f"(stored={stored_hash}, current={workflow_hash}), "
+                        "will re-process"
+                    )
+                    return True
                 self.logger.info(
                     f"Commit {commit_sha} should NOT be processed (status: {status})"
                 )
@@ -253,6 +279,7 @@ class GitWatcher:
         status: CommitStatus,
         build_triggered: bool = False,
         build_id: Optional[int] = None,
+        workflow_hash: Optional[str] = None,
     ) -> None:
         """Update commit status in the database."""
         session = SessionLocal()
@@ -289,6 +316,8 @@ class GitWatcher:
                 tracker.build_triggered = build_triggered  # ty: ignore[invalid-assignment]
                 if build_id:
                     tracker.build_id = build_id  # ty: ignore[invalid-assignment]
+                if workflow_hash is not None:
+                    tracker.workflow_hash = workflow_hash  # ty: ignore[invalid-assignment]
                 _now = datetime.now(timezone.utc).replace(tzinfo=None)
                 tracker.last_updated = _now  # ty: ignore[invalid-assignment]
                 self.logger.info(
@@ -302,6 +331,7 @@ class GitWatcher:
                     build_triggered=build_triggered,
                     build_id=build_id,
                     status=status.value,
+                    workflow_hash=workflow_hash,
                 )
                 session.add(tracker)
                 self.logger.info(
@@ -490,6 +520,9 @@ class GitWatcher:
         # First, check status of any running jobs
         self._check_running_jobs()
 
+        # Compute workflow hash once per cycle
+        wf_hash = self._compute_workflow_hash()
+
         # Fetch latest commits (supports wildcard branch patterns)
         latest_commits = self._fetch_latest_commits()
         if not latest_commits:
@@ -498,7 +531,7 @@ class GitWatcher:
 
         for latest_commit, branch_name in latest_commits:
             # Check if commit should be processed
-            if not self._should_process_commit(latest_commit):
+            if not self._should_process_commit(latest_commit, wf_hash):
                 self.logger.debug(f"Commit should not be processed: {latest_commit}")
                 continue
 
@@ -510,14 +543,18 @@ class GitWatcher:
             job_triggered = self._trigger_ci_job(latest_commit, branch_name)
 
             if job_triggered:
-                # Jobs accepted by Slurm — waiting for allocation
                 self._update_commit_status(
-                    latest_commit, CommitStatus.SUBMITTED, build_triggered=True
+                    latest_commit,
+                    CommitStatus.SUBMITTED,
+                    build_triggered=True,
+                    workflow_hash=wf_hash,
                 )
             else:
-                # sbatch failed or workflow error — mark for retry
                 self._update_commit_status(
-                    latest_commit, CommitStatus.EXCEPTION, build_triggered=False
+                    latest_commit,
+                    CommitStatus.EXCEPTION,
+                    build_triggered=False,
+                    workflow_hash=wf_hash,
                 )
                 self.logger.error(
                     f"Failed to trigger job for commit {latest_commit}, "

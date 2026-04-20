@@ -101,6 +101,7 @@ class CommitTracker(Base):
     build_id = Column(Integer, ForeignKey("builds.id"), nullable=True)
     # Status: pending, submitted, running, completed, failed, exception
     status = Column(String, default="pending")
+    workflow_hash = Column(String, nullable=True)
     last_updated = Column(
         DateTime,
         default=_now,
@@ -110,8 +111,22 @@ class CommitTracker(Base):
     build = relationship("Build")
 
 
+def _add_missing_columns() -> None:
+    """Add columns introduced after initial schema to existing databases."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    existing = {c["name"] for c in inspector.get_columns("commit_trackers")}
+    if "workflow_hash" not in existing:
+        with engine.begin() as conn:
+            conn.execute(
+                text("ALTER TABLE commit_trackers ADD COLUMN workflow_hash VARCHAR")
+            )
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    _add_missing_columns()
 
 
 if __name__ == "__main__":
