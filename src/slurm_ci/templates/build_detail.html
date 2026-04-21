@@ -18,6 +18,7 @@
         {% endif %}
         <p><strong>Status:</strong> <span class="status-{{ build.status }}">{{ build.status }}</span></p>
         <p><strong>Created:</strong> {{ build.created_at | to_eastern }}</p>
+        <p><strong>Updated:</strong> {{ (build.updated_at or build.created_at) | to_eastern }}</p>
     </div>
 
     <h3>Jobs</h3>

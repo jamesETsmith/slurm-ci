@@ -3,7 +3,7 @@
         <tr>
             <th style="width:45%">Build</th>
             <th style="width:25%">Jobs</th>
-            <th style="width:15%">Created</th>
+            <th style="width:15%">Updated</th>
             <th style="width:15%">Actions</th>
         </tr>
     </thead>
@@ -31,7 +31,7 @@
                 {% endif %}
             </td>
             <td>
-                <span class="cell-sub">{{ build.created_at | to_eastern('%Y-%m-%d %H:%M') }}</span>
+                <span class="cell-sub">{{ (build.updated_at or build.created_at) | to_eastern('%Y-%m-%d %H:%M') }}</span>
             </td>
             <td>
                 <a href="{{ url_for('build_detail', build_id=build.id) }}" class="btn btn-sm">Details</a>

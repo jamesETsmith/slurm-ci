@@ -78,9 +78,11 @@ def test_build_detail_route_parses_matrix_args() -> None:
         id=1,
         jobs=[
             SimpleNamespace(
-                id=10, matrix_args=json.dumps({"os": "ubuntu", "py": "3.12"})
+                id=10,
+                matrix_args=json.dumps({"os": "ubuntu", "py": "3.12"}),
+                start_time=None,
             ),
-            SimpleNamespace(id=11, matrix_args=None),
+            SimpleNamespace(id=11, matrix_args=None, start_time=None),
         ],
     )
     query = Mock()
@@ -105,13 +107,15 @@ def test_build_detail_route_parses_matrix_args() -> None:
 
 
 def test_index_route_filter_and_summary_context() -> None:
+    _ts = SimpleNamespace(strftime=lambda _fmt: "2025-01-01 00:00:00")
     build = SimpleNamespace(
         id=1,
         status="failed",
         branch="main",
         workflow_file=".github/workflows/test.yml",
         repo_full_name="org/repo",
-        created_at=SimpleNamespace(strftime=lambda _fmt: "2025-01-01 00:00:00"),
+        created_at=_ts,
+        updated_at=_ts,
         jobs=[
             SimpleNamespace(
                 status="failed",
@@ -150,13 +154,15 @@ def test_index_route_filter_and_summary_context() -> None:
 
 
 def test_index_partials_render() -> None:
+    _ts = SimpleNamespace(strftime=lambda _fmt: "2025-01-01 00:00:00")
     build = SimpleNamespace(
         id=2,
         status="completed",
         branch="dev",
         workflow_file="workflow.yml",
         repo_full_name="org/repo",
-        created_at=SimpleNamespace(strftime=lambda _fmt: "2025-01-01 00:00:00"),
+        created_at=_ts,
+        updated_at=_ts,
         jobs=[],
     )
     query = Mock()

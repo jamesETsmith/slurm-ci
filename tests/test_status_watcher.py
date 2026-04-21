@@ -30,7 +30,7 @@ def test_extract_build_info_defaults() -> None:
     info = watcher.extract_build_info({})
     assert info["repo_full_name"] == "unknown"
     assert info["commit_sha"] == "unknown"
-    assert info["build_key"] == "unknown#unknown#"
+    assert info["build_key"] == "unknown#unknown##unknown#"
 
 
 def test_extract_job_info_uses_runtime_without_sacct(tmp_path: Path) -> None:

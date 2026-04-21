@@ -50,6 +50,7 @@ class Build(Base):
     event_type = Column(String)
     status = Column(String, default="pending")
     created_at = Column(DateTime, default=_now)
+    updated_at = Column(DateTime, default=_now, onupdate=_now)
     jobs = relationship("Job", back_populates="build")
 
 
@@ -116,11 +117,22 @@ def _add_missing_columns() -> None:
     from sqlalchemy import inspect, text
 
     inspector = inspect(engine)
-    existing = {c["name"] for c in inspector.get_columns("commit_trackers")}
-    if "workflow_hash" not in existing:
+
+    ct_cols = {c["name"] for c in inspector.get_columns("commit_trackers")}
+    if "workflow_hash" not in ct_cols:
         with engine.begin() as conn:
             conn.execute(
                 text("ALTER TABLE commit_trackers ADD COLUMN workflow_hash VARCHAR")
+            )
+
+    build_cols = {c["name"] for c in inspector.get_columns("builds")}
+    if "updated_at" not in build_cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE builds ADD COLUMN updated_at DATETIME"))
+            conn.execute(
+                text(
+                    "UPDATE builds SET updated_at = created_at WHERE updated_at IS NULL"
+                )
             )
 
 

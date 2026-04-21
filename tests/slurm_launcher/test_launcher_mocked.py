@@ -126,6 +126,34 @@ class TestSlurmTemplateRenderer:
         assert "[runtime.end]" in script
         assert "exit_code = $EXIT_CODE" in script
 
+    def test_template_with_embedded_workflow(self) -> None:
+        """Test that workflow content is embedded as a heredoc."""
+        renderer = SlurmTemplateRenderer()
+        workflow_yaml = "name: CI\njobs:\n  build:\n    runs-on: ubuntu-latest\n"
+
+        script = renderer.render_script(
+            workdir="/work",
+            main_command='act --workflows "$SLURM_CI_WORKFLOW"',
+            workflow_content=workflow_yaml,
+        )
+
+        assert "SLURM_CI_WORKFLOW=$(mktemp" in script
+        assert "SLURM_CI_WORKFLOW_EOF" in script
+        assert "name: CI" in script
+        assert 'rm -f "$SLURM_CI_WORKFLOW"' in script
+
+    def test_template_without_workflow_content_omits_heredoc(self) -> None:
+        """Test that no heredoc block appears when workflow_content is None."""
+        renderer = SlurmTemplateRenderer()
+
+        script = renderer.render_script(
+            workdir="/work",
+            main_command="echo test",
+        )
+
+        assert "SLURM_CI_WORKFLOW" not in script
+        assert "SLURM_CI_WORKFLOW_EOF" not in script
+
 
 class TestBuildActCommand:
     """Tests for build_act_command function."""
@@ -202,10 +230,15 @@ class TestLaunchSlurmJobs:
 
         mock_check_output.side_effect = git_mock_side_effect
 
-        # Mock sbatch command
-        mock_run.return_value = Mock(
-            returncode=0, stdout="Submitted batch job 12345\n", stderr=""
-        )
+        # Capture the script content before the temp file is cleaned up
+        captured_scripts: list[str] = []
+
+        def sbatch_side_effect(cmd, *args, **kwargs):
+            with open(cmd[1]) as f:
+                captured_scripts.append(f.read())
+            return Mock(returncode=0, stdout="Submitted batch job 12345\n", stderr="")
+
+        mock_run.side_effect = sbatch_side_effect
 
         launch_slurm_jobs(
             str(sample_workflow_file),
@@ -215,9 +248,14 @@ class TestLaunchSlurmJobs:
 
         # Verify sbatch was called
         assert mock_run.called
-        # First arg should be sbatch command
         call_args = mock_run.call_args[0][0]
         assert call_args[0] == "sbatch"
+
+        # Verify the generated script embeds the workflow content
+        assert captured_scripts
+        assert "SLURM_CI_WORKFLOW=$(mktemp" in captured_scripts[0]
+        assert "Test Workflow" in captured_scripts[0]
+        assert '"$SLURM_CI_WORKFLOW"' in captured_scripts[0]
 
     def test_launch_with_custom_options(
         self,

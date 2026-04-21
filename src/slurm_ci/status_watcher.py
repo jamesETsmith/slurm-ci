@@ -52,8 +52,9 @@ class StatusWatcher:
         workflow_file = project.get("workflow_file", "")
         working_directory = project.get("working_directory", "")
 
-        # Create a unique identifier for the build (project + commit + workflow)
-        build_key = f"{project_name}#{commit_sha}#{workflow_file}"
+        build_key = (
+            f"{project_name}#{commit_sha}#{workflow_file}#{branch}#{working_directory}"
+        )
 
         return {
             "build_key": build_key,
@@ -210,6 +211,8 @@ class StatusWatcher:
                 Build.repo_full_name == build_info["repo_full_name"],
                 Build.commit_sha == build_info["commit_sha"],
                 Build.workflow_file == build_info["workflow_file"],
+                Build.branch == build_info["branch"],
+                Build.working_directory == build_info["working_directory"],
             )
             .first()
         )
@@ -296,8 +299,9 @@ class StatusWatcher:
                     "Created job %s -> %s", job_info["name"], job_info["status"]
                 )
 
-            # Update build status based on jobs
+            # Update build status and freshness timestamp
             self.update_build_status(session, build)
+            build.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)  # ty: ignore[invalid-assignment]
 
             session.commit()
             return True

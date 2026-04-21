@@ -31,6 +31,15 @@ export {{ key }}="{{ value }}"
 {%- endfor %}
 
 {%- endif %}
+{%- if workflow_content %}
+# Materialize the workflow file on the compute node so jobs work
+# even when the submit host's filesystem is not mounted here.
+SLURM_CI_WORKFLOW=$(mktemp -t slurm-ci-workflow-XXXXXX.yml)
+cat > "$SLURM_CI_WORKFLOW" << 'SLURM_CI_WORKFLOW_EOF'
+{{ workflow_content }}
+SLURM_CI_WORKFLOW_EOF
+
+{%- endif %}
 {%- if pre_commands %}
 # Pre-execution commands
 {%- for command in pre_commands %}
@@ -80,6 +89,10 @@ if [[ "{{ workdir }}" == /tmp/slurm-ci-* ]]; then
 fi
 {%- endif %}
 
+{%- endif %}
+{%- if workflow_content %}
+# Clean up the materialized workflow file
+rm -f "$SLURM_CI_WORKFLOW"
 {%- endif %}
 {%- if post_commands %}
 # Post-execution commands
@@ -164,6 +177,7 @@ class SlurmTemplateRenderer:
         status_file: Optional[str] = None,
         cleanup_temp_dir: bool = True,
         git_repo: Optional[Dict[str, str]] = None,
+        workflow_content: Optional[str] = None,
         **kwargs: object,
     ) -> str:
         """Render a SLURM job script from template.
@@ -180,6 +194,9 @@ class SlurmTemplateRenderer:
             cleanup_temp_dir: Whether to clean up temp directories
             git_repo: Git repository info (url, branch, commit_sha)
                 for cloning on compute node
+            workflow_content: Raw YAML content of the workflow file to embed
+                in the script. When set, the workflow is materialized on the
+                compute node instead of read from the submit host's filesystem.
             **kwargs: Additional template variables
 
         Returns:
@@ -197,6 +214,7 @@ class SlurmTemplateRenderer:
             "status_file": status_file,
             "cleanup_temp_dir": cleanup_temp_dir,
             "git_repo": git_repo,
+            "workflow_content": workflow_content,
             **kwargs,
         }
 
@@ -301,8 +319,13 @@ def _launch_single_job(
     # provide a dynamic job name (e.g. `name: Test ${{ matrix.version }}`)
     # to ensure unique container names and prevent collisions on the same node.
 
-    # Build the main command pointing at the original workflow file
-    main_command = build_act_command(workflow_file, combo, dryrun)
+    # Read workflow content so it can be embedded in the batch script.
+    # This lets jobs run on nodes that don't share the submit host's filesystem.
+    workflow_content = Path(workflow_file).read_text()
+
+    # Point act at the shell variable that the template will set after
+    # materializing the embedded workflow to a temp file.
+    main_command = build_act_command('"$SLURM_CI_WORKFLOW"', combo, dryrun)
 
     # Render the SLURM script
     slurm_script = renderer.render_script(
@@ -313,6 +336,7 @@ def _launch_single_job(
         status_file=status_file.status_file,
         cleanup_temp_dir=True,
         git_repo=git_repo,
+        workflow_content=workflow_content,
     )
 
     # Add slurm script to status file

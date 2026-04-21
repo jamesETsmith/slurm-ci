@@ -170,7 +170,7 @@ def _load_builds_context() -> dict:
     query = (
         db.query(Build)
         .options(joinedload(Build.jobs))
-        .order_by(Build.created_at.desc())
+        .order_by(Build.updated_at.desc())
     )
 
     if status:
@@ -235,7 +235,7 @@ def _load_builds_context() -> dict:
         if d is not None:
             durations.append(d)
 
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     runs_last_24h = 0
     for build in builds:
         created = getattr(build, "created_at", None)
@@ -254,7 +254,7 @@ def _load_builds_context() -> dict:
 
     # Build options should remain global so users can pivot quickly.
     db = SessionLocal()
-    all_builds = db.query(Build).order_by(Build.created_at.desc()).all()
+    all_builds = db.query(Build).order_by(Build.updated_at.desc()).all()
     db.close()
 
     project_options = sorted(
@@ -275,7 +275,7 @@ def _load_builds_context() -> dict:
         "summary": {
             "total": len(builds),
             "status_counts": status_counts,
-            "last_update": builds[0].created_at if builds else None,
+            "last_update": builds[0].updated_at if builds else None,
         },
         "trend_points": trend_points,
         "kpis": kpis,
@@ -570,16 +570,18 @@ def build_detail(build_id: int) -> str:
                 matrix_args = json.loads(job.matrix_args)
                 matrix_arg_keys.update(matrix_args.keys())
 
-    # sort the keys to have a consistent order
     sorted_matrix_arg_keys = sorted(list(matrix_arg_keys))
 
-    # attach the parsed matrix args to each job object
-    # to avoid parsing it again in the template
     for job in build.jobs:
         if job.matrix_args:
             job.matrix_args_parsed = json.loads(job.matrix_args)
         else:
             job.matrix_args_parsed = {}
+
+    build.jobs.sort(
+        key=lambda j: (j.start_time is not None, j.start_time),
+        reverse=True,
+    )
 
     return render_template(
         "build_detail.html",
