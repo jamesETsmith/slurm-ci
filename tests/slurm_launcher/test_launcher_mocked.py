@@ -257,6 +257,51 @@ class TestLaunchSlurmJobs:
         assert "Test Workflow" in captured_scripts[0]
         assert '"$SLURM_CI_WORKFLOW"' in captured_scripts[0]
 
+    def test_launch_captures_workflow_content(
+        self,
+        mock_check_output: Mock,
+        mock_run: Mock,
+        sample_workflow_file: Path,
+        working_directory: Path,
+    ) -> None:
+        """Launching a job stores workflow_content in the status TOML."""
+
+        def git_mock_side_effect(cmd, *args, **kwargs):
+            if (
+                "rev-parse" in cmd
+                and "HEAD" in cmd
+                and "--abbrev-ref" not in cmd
+                and "--show-toplevel" not in cmd
+            ):
+                return b"abc123\n"
+            elif "rev-parse" in cmd and "--show-toplevel" in cmd:
+                return b"/tmp/sample_project\n"
+            elif "rev-parse" in cmd and "--abbrev-ref" in cmd:
+                return b"main\n"
+            return b""
+
+        mock_check_output.side_effect = git_mock_side_effect
+        mock_run.return_value = Mock(
+            returncode=0, stdout="Submitted batch job 12345\n", stderr=""
+        )
+
+        launch_slurm_jobs(
+            str(sample_workflow_file),
+            str(working_directory),
+            dryrun=False,
+        )
+
+        # Read back one of the status files and confirm workflow_content is set.
+        import toml
+
+        from slurm_ci.config import STATUS_DIR
+
+        status_files = list(Path(STATUS_DIR).glob("*.toml"))
+        assert status_files, "Expected at least one status file"
+        data = toml.load(status_files[0])
+        assert "workflow_content" in data["project"]
+        assert "Test Workflow" in data["project"]["workflow_content"]
+
     def test_launch_with_custom_options(
         self,
         mock_check_output: Mock,
@@ -427,3 +472,62 @@ class TestRelaunchSlurmJob:
         assert mock_run.called
         call_args = mock_run.call_args[0][0]
         assert call_args[0] == "sbatch"
+
+    def test_relaunch_after_workflow_file_deleted(
+        self,
+        mock_check_output: Mock,
+        mock_run: Mock,
+        tmp_path: Path,
+    ) -> None:
+        """Relaunch succeeds using captured workflow_content even if the
+        original workflow file no longer exists on disk."""
+
+        workflow_yaml = "name: test\njobs:\n  test:\n    runs-on: ubuntu"
+
+        def git_mock_side_effect(cmd, *args, **kwargs):
+            if (
+                "rev-parse" in cmd
+                and "HEAD" in cmd
+                and "--abbrev-ref" not in cmd
+                and "--show-toplevel" not in cmd
+            ):
+                return b"abc123\n"
+            elif "rev-parse" in cmd and "--show-toplevel" in cmd:
+                return b"/tmp/test_project\n"
+            elif "rev-parse" in cmd and "--abbrev-ref" in cmd:
+                return b"main\n"
+            return b""
+
+        mock_check_output.side_effect = git_mock_side_effect
+
+        captured_scripts: list[str] = []
+
+        def sbatch_side_effect(cmd, *args, **kwargs):
+            with open(cmd[1]) as f:
+                captured_scripts.append(f.read())
+            return Mock(returncode=0, stdout="Submitted batch job 12345\n", stderr="")
+
+        mock_run.side_effect = sbatch_side_effect
+
+        # Create a workflow file and a status file that already stores the
+        # workflow content (simulating a previous launch that captured it).
+        workflow_file = tmp_path / "workflow.yml"
+        workflow_file.write_text(workflow_yaml)
+
+        status_file = StatusFile(
+            workflow_file=str(workflow_file),
+            working_directory=str(tmp_path),
+            matrix_args={"version": "1.0"},
+        )
+        status_file.data["project"]["workflow_content"] = workflow_yaml
+        status_file.write()
+
+        # Delete the workflow file to simulate it being moved/removed.
+        workflow_file.unlink()
+        assert not workflow_file.exists()
+
+        relaunch_slurm_job(status_file)
+
+        assert mock_run.called
+        assert captured_scripts
+        assert "name: test" in captured_scripts[0]

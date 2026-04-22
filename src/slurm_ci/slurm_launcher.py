@@ -319,9 +319,13 @@ def _launch_single_job(
     # provide a dynamic job name (e.g. `name: Test ${{ matrix.version }}`)
     # to ensure unique container names and prevent collisions on the same node.
 
-    # Read workflow content so it can be embedded in the batch script.
-    # This lets jobs run on nodes that don't share the submit host's filesystem.
-    workflow_content = Path(workflow_file).read_text()
+    # Prefer workflow content already captured in the status file (e.g.
+    # during a relaunch after the original file was moved/deleted).
+    # Fall back to reading from disk on first launch.
+    workflow_content = status_file.data["project"].get("workflow_content")
+    if workflow_content is None:
+        workflow_content = Path(workflow_file).read_text()
+        status_file.data["project"]["workflow_content"] = workflow_content
 
     # Point act at the shell variable that the template will set after
     # materializing the embedded workflow to a temp file.
