@@ -235,7 +235,7 @@ def _load_builds_context() -> dict:
         if d is not None:
             durations.append(d)
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     runs_last_24h = 0
     for build in builds:
         created = getattr(build, "created_at", None)
