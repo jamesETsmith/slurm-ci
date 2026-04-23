@@ -11,7 +11,9 @@
         <p><strong>Branch:</strong> {{ build.branch }}</p>
         {% endif %}
         {% if build.workflow_file %}
-        <p><strong>Workflow:</strong> {{ build.workflow_file }}</p>
+        <p><strong>Workflow:</strong> {{ build.workflow_file }}
+            <a href="{{ url_for('build_workflow', build_id=build.id) }}" class="btn btn-sm" target="_blank">View</a>
+        </p>
         {% endif %}
         {% if build.working_directory %}
         <p><strong>Working Directory:</strong> <code>{{ build.working_directory }}</code></p>

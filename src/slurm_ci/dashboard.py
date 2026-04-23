@@ -591,6 +591,126 @@ def build_detail(build_id: int) -> str:
     )
 
 
+@app.route("/build/<int:build_id>/workflow")
+def build_workflow(build_id: int) -> Response:
+    """Serve the workflow YAML that was used for a build.
+
+    Tries, in order:
+      1. ``project.workflow_content`` captured in a job's status TOML
+      2. The workflow file on disk (``build.workflow_file``)
+    """
+    db = SessionLocal()
+    build = (
+        db.query(Build)
+        .options(joinedload(Build.jobs))
+        .filter(Build.id == build_id)
+        .first()
+    )
+    db.close()
+
+    if not build:
+        abort(404)
+
+    workflow_content = None
+    workflow_label = os.path.basename(str(build.workflow_file or "workflow.yml"))
+
+    for job in build.jobs or []:
+        if not job.status_file_path or not os.path.exists(str(job.status_file_path)):
+            continue
+        try:
+            with open(str(job.status_file_path), "r") as f:
+                data = toml.load(f)
+            wc = data.get("project", {}).get("workflow_content")
+            if wc:
+                workflow_content = wc
+                break
+        except Exception:
+            continue
+
+    if workflow_content is None and build.workflow_file:
+        try:
+            workflow_content = Path(str(build.workflow_file)).read_text()
+        except OSError:
+            pass
+
+    if workflow_content is None:
+        abort(
+            404,
+            description="Workflow content not available — the file may have "
+            "been moved and no captured copy exists in the status files.",
+        )
+
+    import html as html_mod
+
+    escaped = html_mod.escape(workflow_content)
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Workflow - {html_mod.escape(workflow_label)}</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                         Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f6f8fa;
+            color: #24292f;
+        }}
+        .header {{
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }}
+        .content {{
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        pre {{
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono',
+                         Menlo, monospace;
+            font-size: 14px;
+            margin: 0;
+        }}
+        .btn {{
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-right: 10px;
+        }}
+        .btn:hover {{
+            background-color: #0056b3;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Workflow: {html_mod.escape(workflow_label)}</h1>
+        <p><strong>Build:</strong> #{build_id}
+           &mdash; {html_mod.escape(str(build.repo_full_name))}</p>
+        <a href="javascript:history.back()" class="btn">Back</a>
+    </div>
+    <div class="content">
+        <pre><code>{escaped}</code></pre>
+    </div>
+</body>
+</html>"""
+
+    return Response(html_content, mimetype="text/html")
+
+
 @app.route("/job/<int:job_id>/log")
 def job_log(job_id: int) -> Response:
     """Serve the raw log file for a specific job with auto-scroll."""
