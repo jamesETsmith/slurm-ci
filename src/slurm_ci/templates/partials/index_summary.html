@@ -4,6 +4,10 @@
         <div class="summary-value">{{ summary.total }}</div>
     </div>
     <div class="summary-card">
+        <div class="summary-label">Submitted</div>
+        <div class="summary-value status-submitted">{{ summary.status_counts.submitted }}</div>
+    </div>
+    <div class="summary-card">
         <div class="summary-label">Running</div>
         <div class="summary-value status-running">{{ summary.status_counts.running }}</div>
     </div>
@@ -58,7 +62,10 @@
     id="trend-data"
     style="display:none;"
     data-labels='{{ trend_points | map(attribute="label") | list | tojson }}'
-    data-passed='{{ trend_points | map(attribute="passed") | list | tojson }}'
+    data-completed='{{ trend_points | map(attribute="completed") | list | tojson }}'
     data-failed='{{ trend_points | map(attribute="failed") | list | tojson }}'
-    data-other='{{ trend_points | map(attribute="other") | list | tojson }}'
+    data-running='{{ trend_points | map(attribute="running") | list | tojson }}'
+    data-pending='{{ trend_points | map(attribute="pending") | list | tojson }}'
+    data-submitted='{{ trend_points | map(attribute="submitted") | list | tojson }}'
+    data-incomplete='{{ trend_points | map(attribute="incomplete") | list | tojson }}'
     data-build-ids='{{ trend_points | map(attribute="build_id") | list | tojson }}'></div>

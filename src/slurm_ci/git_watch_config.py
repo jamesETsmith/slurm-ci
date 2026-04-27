@@ -36,6 +36,7 @@ class GitWatchConfig:
 
     # Optional fields (with defaults)
     polling_interval: int = 300
+    config_file_path: Optional[str] = None
     branch: str = "main"
     branches: Optional[List[str]] = None
     refs_include: Optional[List[str]] = None
@@ -72,7 +73,9 @@ class GitWatchConfig:
                     (config_dir / working_directory).resolve()
                 )
 
-        return cls.from_dict(config_data)
+        instance = cls.from_dict(config_data)
+        instance.config_file_path = str(config_path_obj)
+        return instance
 
     @classmethod
     def from_dict(cls, config_data: dict) -> "GitWatchConfig":

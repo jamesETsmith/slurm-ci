@@ -35,6 +35,9 @@
             </td>
             <td>
                 <a href="{{ url_for('build_detail', build_id=build.id) }}" class="btn btn-sm">Details</a>
+                {% if build.daemon_name_resolved %}
+                <a href="{{ url_for('daemon_config', daemon_name=build.daemon_name_resolved) }}" class="btn btn-sm" target="_blank">Config</a>
+                {% endif %}
             </td>
         </tr>
         {% else %}

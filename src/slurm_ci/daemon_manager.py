@@ -86,6 +86,7 @@ class DaemonManager:
                 "polling_interval": config.polling_interval,
                 "workflow_file": config.workflow_file,
                 "working_directory": config.working_directory,
+                "config_file_path": config.config_file_path,
             },
         }
 

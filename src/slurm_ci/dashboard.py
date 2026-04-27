@@ -11,8 +11,9 @@ from .config import STATUS_DIR
 from .database import Build, Job, SessionLocal
 
 
-TREND_WINDOW = 20
+TREND_WINDOW = 10
 TERMINAL_BUILD_STATUSES = ("completed", "failed")
+_GIT_WATCH_STATUS_DIR = Path.home() / ".slurm-ci" / "git-watch" / "status"
 
 
 # Get the directory where this file is located
@@ -116,6 +117,30 @@ app.jinja_env.filters["format_percent"] = format_percent_filter
 app.jinja_env.filters["to_eastern"] = to_eastern_filter
 
 
+def _daemon_config_map() -> dict[str, dict]:
+    """Scan git-watch daemon status files and return a lookup by workflow_file.
+
+    Each value is ``{"daemon_name": ..., "config_file_path": ...}``.
+    """
+    result: dict[str, dict] = {}
+    if not _GIT_WATCH_STATUS_DIR.is_dir():
+        return result
+    for status_path in _GIT_WATCH_STATUS_DIR.glob("*.status"):
+        try:
+            with open(status_path, "r") as f:
+                data = json.load(f)
+            cfg = data.get("config", {})
+            wf = cfg.get("workflow_file")
+            if wf:
+                result[wf] = {
+                    "daemon_name": data.get("daemon_name", status_path.stem),
+                    "config_file_path": cfg.get("config_file_path"),
+                }
+        except Exception:
+            continue
+    return result
+
+
 def _percentile(values: list[float], q: float) -> float | None:
     """Return the linear-interpolation percentile (q in [0, 1])."""
     if not values:
@@ -165,6 +190,7 @@ def _load_builds_context() -> dict:
     branch = request.args.get("branch", "").strip()
     workflow = request.args.get("workflow", "").strip()
     project = request.args.get("project", "").strip()
+    commit = request.args.get("commit", "").strip()
 
     db = SessionLocal()
     query = (
@@ -181,12 +207,20 @@ def _load_builds_context() -> dict:
         query = query.filter(Build.workflow_file.ilike(f"%{workflow}%"))
     if project:
         query = query.filter(Build.repo_full_name == project)
+    if commit:
+        query = query.filter(Build.commit_sha.ilike(f"{commit}%"))
 
     builds = query.all()
     db.close()
 
+    dcm = _daemon_config_map()
+    for build in builds:
+        info = dcm.get(str(build.workflow_file))
+        build.daemon_name_resolved = info["daemon_name"] if info else None  # type: ignore[attr-defined]
+
     status_counts = {
         "pending": 0,
+        "submitted": 0,
         "running": 0,
         "completed": 0,
         "failed": 0,
@@ -197,26 +231,29 @@ def _load_builds_context() -> dict:
         if build_status in status_counts:
             status_counts[build_status] += 1
 
+    _KNOWN_JOB_STATUSES = (
+        "completed",
+        "failed",
+        "running",
+        "pending",
+        "submitted",
+        "incomplete",
+    )
+
     trend_points = []
     for build in reversed(builds[:TREND_WINDOW]):
-        passed = 0
-        failed = 0
-        other = 0
+        counts: dict[str, int] = {s: 0 for s in _KNOWN_JOB_STATUSES}
         for job in build.jobs:
             job_status = str(job.status) if job.status is not None else ""
-            if job_status == "completed":
-                passed += 1
-            elif job_status == "failed":
-                failed += 1
+            if job_status in counts:
+                counts[job_status] += 1
             else:
-                other += 1
+                counts["pending"] += 1
         trend_points.append(
             {
                 "label": f"#{build.id}",
                 "build_id": build.id,
-                "passed": passed,
-                "failed": failed,
-                "other": other,
+                **counts,
             }
         )
 
@@ -268,7 +305,14 @@ def _load_builds_context() -> dict:
             if b.workflow_file and os.path.basename(str(b.workflow_file))
         }
     )
-    status_options = ["pending", "running", "completed", "failed", "incomplete"]
+    status_options = [
+        "pending",
+        "submitted",
+        "running",
+        "completed",
+        "failed",
+        "incomplete",
+    ]
 
     return {
         "builds": builds,
@@ -284,6 +328,7 @@ def _load_builds_context() -> dict:
             "branch": branch,
             "workflow": workflow,
             "project": project,
+            "commit": commit,
         },
         "filter_options": {
             "status": status_options,
@@ -320,8 +365,10 @@ def all_logs() -> str:
     branch_filter = request.args.get("branch", "").strip()
     workflow_filter = request.args.get("workflow", "").strip()
     project_filter = request.args.get("project", "").strip()
+    commit_filter = request.args.get("commit", "").strip()
     status_dir = Path(STATUS_DIR)
     log_entries = []
+    dcm = _daemon_config_map()
 
     # Scan all .toml files in the status directory
     for toml_file in sorted(
@@ -356,6 +403,9 @@ def all_logs() -> str:
                 else None,
                 "slurm_job_id": data.get("slurm", {}).get("job_id"),
             }
+            wf_path = data.get("project", {}).get("workflow_file", "")
+            dcm_info = dcm.get(wf_path)
+            entry["daemon_name"] = dcm_info["daemon_name"] if dcm_info else None
             entry["status"] = _build_status_from_entry(entry)
             if status_filter and entry["status"] != status_filter:
                 continue
@@ -368,6 +418,10 @@ def all_logs() -> str:
                 continue
             if project_filter and entry["project_name"] != project_filter:
                 continue
+            if commit_filter:
+                full_sha = data.get("git", {}).get("commit", "")
+                if not full_sha.lower().startswith(commit_filter.lower()):
+                    continue
             log_entries.append(entry)
         except Exception as e:
             # If we can't parse a file, skip it
@@ -396,9 +450,17 @@ def all_logs() -> str:
             "branch": branch_filter,
             "workflow": workflow_filter,
             "project": project_filter,
+            "commit": commit_filter,
         },
         filter_options={
-            "status": ["pending", "running", "completed", "failed", "incomplete"],
+            "status": [
+                "pending",
+                "submitted",
+                "running",
+                "completed",
+                "failed",
+                "incomplete",
+            ],
             "project": project_options,
             "branch": branch_options,
             "workflow": workflow_options,
@@ -563,6 +625,10 @@ def build_detail(build_id: int) -> str:
     if not build:
         abort(404)
 
+    dcm = _daemon_config_map()
+    info = dcm.get(str(build.workflow_file))
+    build.daemon_name_resolved = info["daemon_name"] if info else None  # type: ignore[attr-defined]
+
     matrix_arg_keys = set()
     if build.jobs:
         for job in build.jobs:
@@ -700,6 +766,79 @@ def build_workflow(build_id: int) -> Response:
         <h1>Workflow: {html_mod.escape(workflow_label)}</h1>
         <p><strong>Build:</strong> #{build_id}
            &mdash; {html_mod.escape(str(build.repo_full_name))}</p>
+        <a href="javascript:history.back()" class="btn">Back</a>
+    </div>
+    <div class="content">
+        <pre><code>{escaped}</code></pre>
+    </div>
+</body>
+</html>"""
+
+    return Response(html_content, mimetype="text/html")
+
+
+@app.route("/daemon/<daemon_name>/config")
+def daemon_config(daemon_name: str) -> Response:
+    """Serve the git-watch config TOML used by a daemon."""
+    import html as html_mod
+
+    dcm = _daemon_config_map()
+    config_path = None
+    for info in dcm.values():
+        if info["daemon_name"] == daemon_name:
+            config_path = info.get("config_file_path")
+            break
+
+    if not config_path or not os.path.isfile(config_path):
+        abort(
+            404,
+            description="Config file not available — the daemon may have "
+            "been started without a recorded config path.",
+        )
+
+    config_content = Path(config_path).read_text()
+    label = os.path.basename(config_path)
+    escaped = html_mod.escape(config_content)
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Config - {html_mod.escape(label)}</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                         Helvetica, Arial, sans-serif;
+            margin: 0; padding: 20px;
+            background-color: #f6f8fa; color: #24292f;
+        }}
+        .header {{
+            background-color: #fff; padding: 20px; border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px;
+        }}
+        .content {{
+            background-color: #fff; padding: 20px; border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        pre {{
+            background-color: #f8f9fa; border: 1px solid #dee2e6;
+            border-radius: 4px; padding: 15px; overflow-x: auto;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono',
+                         Menlo, monospace;
+            font-size: 14px; margin: 0;
+        }}
+        .btn {{
+            display: inline-block; padding: 8px 16px;
+            background-color: #007bff; color: white;
+            text-decoration: none; border-radius: 4px; margin-right: 10px;
+        }}
+        .btn:hover {{ background-color: #0056b3; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Git-Watch Config: {html_mod.escape(label)}</h1>
+        <p><strong>Daemon:</strong> {html_mod.escape(daemon_name)}</p>
+        <p><strong>Path:</strong> <code>{html_mod.escape(config_path)}</code></p>
         <a href="javascript:history.back()" class="btn">Back</a>
     </div>
     <div class="content">

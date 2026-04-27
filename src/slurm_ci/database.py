@@ -1,6 +1,7 @@
 import datetime
 from datetime import timezone
 from enum import Enum
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -11,6 +12,7 @@ from sqlalchemy import (
     String,
     Text,
     create_engine,
+    event,
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
@@ -30,6 +32,19 @@ class CommitStatus(Enum):
 
 
 engine = create_engine(config.DATABASE_URL)
+
+
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragma(
+    dbapi_connection: Any,  # noqa: ANN401
+    connection_record: Any,  # noqa: ANN401
+) -> None:
+    """Enable WAL journal mode for better concurrent-access reliability."""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.close()
+
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

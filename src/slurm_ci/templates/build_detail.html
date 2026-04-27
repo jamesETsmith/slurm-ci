@@ -15,6 +15,11 @@
             <a href="{{ url_for('build_workflow', build_id=build.id) }}" class="btn btn-sm" target="_blank">View</a>
         </p>
         {% endif %}
+        {% if build.daemon_name_resolved %}
+        <p><strong>Git-Watch Config:</strong>
+            <a href="{{ url_for('daemon_config', daemon_name=build.daemon_name_resolved) }}" class="btn btn-sm" target="_blank">View</a>
+        </p>
+        {% endif %}
         {% if build.working_directory %}
         <p><strong>Working Directory:</strong> <code>{{ build.working_directory }}</code></p>
         {% endif %}

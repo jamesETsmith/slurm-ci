@@ -40,6 +40,10 @@
         Workflow
         <input type="text" name="workflow" value="{{ filters.workflow }}" placeholder="build.yml">
     </label>
+    <label>
+        Commit
+        <input type="text" name="commit" value="{{ filters.commit }}" placeholder="abc123">
+    </label>
     <button type="submit">Apply</button>
     <a href="{{ url_for('index') }}">Reset</a>
 </form>
@@ -78,21 +82,33 @@
     (function () {
         let outcomeChart = null;
 
+        var STATUS_KEYS = ["completed", "failed", "running", "pending", "submitted", "incomplete"];
+
         function readTrendData() {
             const node = document.getElementById("trend-data");
             if (!node) return null;
             try {
-                return {
+                var result = {
                     labels: JSON.parse(node.dataset.labels || "[]"),
-                    passed: JSON.parse(node.dataset.passed || "[]"),
-                    failed: JSON.parse(node.dataset.failed || "[]"),
-                    other: JSON.parse(node.dataset.other || "[]"),
                     buildIds: JSON.parse(node.dataset.buildIds || "[]"),
                 };
+                STATUS_KEYS.forEach(function (key) {
+                    result[key] = JSON.parse(node.dataset[key] || "[]");
+                });
+                return result;
             } catch (err) {
                 return null;
             }
         }
+
+        var STATUS_CHART_META = {
+            completed:  { label: "Completed",  bg: "rgba(63,185,80,0.75)",   border: "#3fb950" },
+            failed:     { label: "Failed",     bg: "rgba(248,81,73,0.85)",   border: "#f85149" },
+            running:    { label: "Running",    bg: "rgba(88,166,255,0.75)",  border: "#58a6ff" },
+            pending:    { label: "Pending",    bg: "rgba(210,153,34,0.75)",  border: "#d29922" },
+            submitted:  { label: "Submitted",  bg: "rgba(63,181,197,0.75)",  border: "#3fb5c5" },
+            incomplete: { label: "Incomplete", bg: "rgba(163,113,247,0.75)", border: "#a371f7" },
+        };
 
         function ensureChart() {
             const canvas = document.getElementById("build-outcome-trend");
@@ -102,37 +118,21 @@
             Chart.defaults.color = "#8b949e";
             Chart.defaults.borderColor = "#30363d";
 
+            var datasets = STATUS_KEYS.map(function (key) {
+                var meta = STATUS_CHART_META[key];
+                return {
+                    label: meta.label,
+                    data: [],
+                    backgroundColor: meta.bg,
+                    borderColor: meta.border,
+                    borderWidth: 1,
+                    stack: "jobs"
+                };
+            });
+
             outcomeChart = new Chart(canvas, {
                 type: "bar",
-                data: {
-                    labels: [],
-                    datasets: [
-                        {
-                            label: "Passed",
-                            data: [],
-                            backgroundColor: "rgba(63,185,80,0.75)",
-                            borderColor: "#3fb950",
-                            borderWidth: 1,
-                            stack: "jobs"
-                        },
-                        {
-                            label: "Failed",
-                            data: [],
-                            backgroundColor: "rgba(248,81,73,0.85)",
-                            borderColor: "#f85149",
-                            borderWidth: 1,
-                            stack: "jobs"
-                        },
-                        {
-                            label: "Other",
-                            data: [],
-                            backgroundColor: "rgba(139,148,158,0.55)",
-                            borderColor: "#8b949e",
-                            borderWidth: 1,
-                            stack: "jobs"
-                        }
-                    ]
-                },
+                data: { labels: [], datasets: datasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
@@ -187,9 +187,9 @@
             const data = readTrendData();
             if (!data) return;
             chart.data.labels = data.labels;
-            chart.data.datasets[0].data = data.passed;
-            chart.data.datasets[1].data = data.failed;
-            chart.data.datasets[2].data = data.other;
+            STATUS_KEYS.forEach(function (key, i) {
+                chart.data.datasets[i].data = data[key];
+            });
             chart.update("none");
         }
 

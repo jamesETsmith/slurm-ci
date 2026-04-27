@@ -41,6 +41,10 @@
         Workflow
         <input type="text" name="workflow" value="{{ filters.workflow }}" placeholder="workflow.yml">
     </label>
+    <label>
+        Commit
+        <input type="text" name="commit" value="{{ filters.commit }}" placeholder="abc123">
+    </label>
     <button type="submit">Apply</button>
     <a href="{{ url_for('all_logs') }}">Reset</a>
 </form>
@@ -110,6 +114,9 @@
                 <a href="{{ url_for('raw_log', filename=entry.log_file | basename) }}" class="btn btn-sm" target="_blank">Log</a>
                 {% endif %}
                 <a href="{{ url_for('raw_status', filename=entry.status_file | basename) }}" class="btn btn-sm" target="_blank">Status</a>
+                {% if entry.daemon_name %}
+                <a href="{{ url_for('daemon_config', daemon_name=entry.daemon_name) }}" class="btn btn-sm" target="_blank">Config</a>
+                {% endif %}
                 <button class="btn btn-sm rerun-btn" data-command="slurm-ci relaunch {{ entry.status_file }}" title="Copy rerun command to clipboard">Rerun</button>
             </td>
         </tr>
